@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.gitignore
+*.md
+.env
+.env.*
+!.env.example
+coverage
+.nyc_output
+test
+*.test.ts
+*.spec.ts

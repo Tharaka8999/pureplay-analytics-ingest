@@ -1,0 +1,34 @@
+# Build
+dist/
+*.js.map
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+pino-*.log
+
+# Coverage
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+test-results/
+
+# TypeScript
+*.tsbuildinfo

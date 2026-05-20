@@ -1,0 +1,22 @@
+{
+  "type": "shot.recorded",
+  "data": {
+    "player": {
+      "id": "ps-v3-player-001"
+    },
+    "device": {
+      "id": "ps-v3-device-001"
+    },
+    "shot": {
+      "id": "ps-v3-shot-001",
+      "occurred_at": "2026-05-19T20:14:22+10:00",
+      "club_code": "7I",
+      "ball_speed": { "value": 129.5, "unit": "mph" },
+      "club_speed": { "value": 86.0, "unit": "mph" },
+      "launch_angle": 17.8,
+      "spin_rpm": 7200,
+      "carry": { "value": 155.6, "unit": "yd" },
+      "deviation": { "value": -4.0, "unit": "ft" }
+    }
+  }
+}

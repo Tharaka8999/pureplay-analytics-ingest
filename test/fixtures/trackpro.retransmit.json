@@ -1,0 +1,15 @@
+{
+  "shot_uid": "tp-2026-05-18-9b3c1a4d",
+  "user_external_id": "user_001",
+  "session_id": "sess-tp-001",
+  "device_id": "tp-device-A4F2",
+  "captured_at": "2026-05-18T10:14:22.341Z",
+  "club": "7i",
+  "ball_speed_mps": 58.2,
+  "club_head_speed_mps": 38.4,
+  "launch_angle_deg": 18.2,
+  "spin_rpm": 6420,
+  "carry_distance_m": 142.3,
+  "total_distance_m": 154.1,
+  "side_deviation_m": -3.2
+}

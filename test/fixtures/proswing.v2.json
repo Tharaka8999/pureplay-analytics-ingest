@@ -1,0 +1,17 @@
+{
+  "type": "shot.recorded",
+  "data": {
+    "user_token": "ps_tok_v2_a1b2c3d4ef",
+    "shot": {
+      "id": "ps_v2_shot_001",
+      "occurred_at": "2026-05-19T14:30:00+10:00",
+      "club_code": "6I",
+      "ball_speed_mph": 132.5,
+      "club_speed_mph": 88.2,
+      "launch_deg": 19.5,
+      "carry_yd": 162.0,
+      "total_yd": 176.0,
+      "deviation_yd": -1.8
+    }
+  }
+}

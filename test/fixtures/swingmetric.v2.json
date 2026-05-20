@@ -1,0 +1,29 @@
+{
+  "session_id": "sm-v2-sess-2026051901",
+  "player": {
+    "id": "swing-user-B"
+  },
+  "device": "SWING_ULTRA_001",
+  "shots": [
+    {
+      "ts_ms": 1779199398000,
+      "club": "7I",
+      "ball_speed_mph": 121.5,
+      "swing_speed_mph": 88.4,
+      "launch_angle": 22.8,
+      "spin_rpm": 7200,
+      "carry_yd": 158.0,
+      "total_yd": 172.0,
+      "offline_yd": -2.1
+    },
+    {
+      "ts_ms": 1779199458000,
+      "club": "Driver",
+      "ball_speed_mph": 152.0,
+      "swing_speed_mph": 104.0,
+      "launch_angle": 11.5,
+      "carry_yd": 248.0,
+      "offline_yd": 3.5
+    }
+  ]
+}

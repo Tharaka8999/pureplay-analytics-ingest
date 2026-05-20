@@ -1,0 +1,15 @@
+{
+  "shot_uid": "tp-2020-01-01-aaaa0001",
+  "user_external_id": "user-skew",
+  "session_id": "session-skew",
+  "device_id": "tp-device-skew",
+  "captured_at": "2020-01-01T00:00:00Z",
+  "club": "DR",
+  "ball_speed_mps": 74.7,
+  "club_head_speed_mps": 50.0,
+  "launch_angle_deg": 10.5,
+  "spin_rpm": 2800,
+  "carry_distance_m": 242.3,
+  "total_distance_m": 256.0,
+  "side_deviation_m": 0.6
+}

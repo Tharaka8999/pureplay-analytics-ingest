@@ -1,0 +1,815 @@
+{
+  "info": {
+    "name": "Pureplay Analytics Ingest",
+    "description": "Complete API collection for the Pureplay multi-vendor golf shot ingestion service.\n\nBase URL: http://localhost:3000\n\nHappy-path webhook requests use pre-request scripts to generate timestamps dynamically so\nthe collection never rots. Error tests (400, 422) use fixed stale dates.\n\n## Auth\nIn dev with WEBHOOK_AUTH_MODE=none no header is needed for webhooks.\nQuery/stats/identity endpoints require Authorization: Bearer {{internal_api_key}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "pureplay-analytics-ingest-v4"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": ["pm.globals.set('reqStartTime', Date.now());"]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const elapsed = Date.now() - pm.globals.get('reqStartTime');",
+          "pm.test('Response time < 2000ms', () => { pm.expect(elapsed).to.be.below(2000); });"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url",         "value": "http://localhost:3000",                                "type": "string" },
+    { "key": "tp_user_id",       "value": "user_001",                                             "type": "string" },
+    { "key": "sm_user_id",       "value": "swing-user-A",                                         "type": "string" },
+    { "key": "ps_user_id",       "value": "ps_tok_b2a14e7c91f0",                                  "type": "string" },
+    { "key": "canonical_user_id","value": "01HVPOSTMAN000000000000001",                            "type": "string" },
+    { "key": "internal_api_key", "value": "dev-load-test-internal-api-key-change-in-prod",         "type": "string" },
+    { "key": "tp_shot_uid_1",    "value": "",                                                      "type": "string" },
+    { "key": "tp_captured_at_1", "value": "",                                                      "type": "string" },
+    { "key": "tp_shot_uid_2",    "value": "",                                                      "type": "string" },
+    { "key": "tp_captured_at_2", "value": "",                                                      "type": "string" },
+    { "key": "sm_ts_ms_1",       "value": "",                                                      "type": "string" },
+    { "key": "sm_ts_ms_2",       "value": "",                                                      "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /healthz — liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/healthz", "host": ["{{base_url}}"], "path": ["healthz"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "pm.test('status ok', () => { pm.expect(pm.response.json().status).to.eql('ok'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /readyz — readiness (DB + Redis)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/readyz", "host": ["{{base_url}}"], "path": ["readyz"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('status ok',  () => { pm.expect(b.status).to.eql('ok'); });",
+            "pm.test('db up',      () => { pm.expect(b.info.db.status).to.eql('up'); });",
+            "pm.test('redis up',   () => { pm.expect(b.info.redis.status).to.eql('up'); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Webhooks — TrackPro",
+      "description": "Single-shot ingest. Happy-path requests use pre-request scripts for fresh timestamps.",
+      "item": [
+        {
+          "name": "POST /v1/webhooks/trackpro — 7 iron (shot 1)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "const d = new Date();",
+              "const pad = n => String(n).padStart(2,'0');",
+              "const today = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;",
+              "pm.collectionVariables.set('tp_shot_uid_1', `tp-${today}-aaaa0001`);",
+              "pm.collectionVariables.set('tp_captured_at_1', new Date(Date.now()-600000).toISOString());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "const b = pm.response.json();",
+              "pm.test('status accepted',      () => { pm.expect(b.status).to.eql('accepted'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shot_uid\": \"{{tp_shot_uid_1}}\",\n  \"user_external_id\": \"{{tp_user_id}}\",\n  \"device_id\": \"tp-device-A4F2\",\n  \"captured_at\": \"{{tp_captured_at_1}}\",\n  \"club\": \"7i\",\n  \"ball_speed_mps\": 58.2,\n  \"club_head_speed_mps\": 38.4,\n  \"launch_angle_deg\": 18.2,\n  \"spin_rpm\": 6420,\n  \"carry_distance_m\": 142.3,\n  \"total_distance_m\": 154.1,\n  \"side_deviation_m\": -3.2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/trackpro", "host": ["{{base_url}}"], "path": ["v1","webhooks","trackpro"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/trackpro — retransmit (same shot_uid → idempotent 202)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "pm.test('status accepted', () => { pm.expect(pm.response.json().status).to.eql('accepted'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shot_uid\": \"{{tp_shot_uid_1}}\",\n  \"user_external_id\": \"{{tp_user_id}}\",\n  \"device_id\": \"tp-device-A4F2\",\n  \"captured_at\": \"{{tp_captured_at_1}}\",\n  \"club\": \"7i\",\n  \"ball_speed_mps\": 58.2,\n  \"club_head_speed_mps\": 38.4,\n  \"launch_angle_deg\": 18.2,\n  \"spin_rpm\": 6420,\n  \"carry_distance_m\": 142.3,\n  \"total_distance_m\": 154.1,\n  \"side_deviation_m\": -3.2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/trackpro", "host": ["{{base_url}}"], "path": ["v1","webhooks","trackpro"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/trackpro — 7 iron (shot 2)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "const d = new Date();",
+              "const pad = n => String(n).padStart(2,'0');",
+              "const today = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;",
+              "pm.collectionVariables.set('tp_shot_uid_2', `tp-${today}-aaaa0002`);",
+              "pm.collectionVariables.set('tp_captured_at_2', new Date(Date.now()-300000).toISOString());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "const b = pm.response.json();",
+              "pm.test('status accepted',      () => { pm.expect(b.status).to.eql('accepted'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shot_uid\": \"{{tp_shot_uid_2}}\",\n  \"user_external_id\": \"{{tp_user_id}}\",\n  \"device_id\": \"tp-device-A4F2\",\n  \"captured_at\": \"{{tp_captured_at_2}}\",\n  \"club\": \"7i\",\n  \"ball_speed_mps\": 56.8,\n  \"club_head_speed_mps\": 37.9,\n  \"launch_angle_deg\": 17.4,\n  \"spin_rpm\": 6580,\n  \"carry_distance_m\": 138.7,\n  \"total_distance_m\": 150.2,\n  \"side_deviation_m\": 1.8\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/trackpro", "host": ["{{base_url}}"], "path": ["v1","webhooks","trackpro"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/trackpro — 422 stale captured_at (clock skew)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 422', () => { pm.response.to.have.status(422); });",
+              "const b = pm.response.json();",
+              "pm.test('CLOCK_SKEW_EXCESSIVE', () => { pm.expect(b.error_code).to.eql('CLOCK_SKEW_EXCESSIVE'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shot_uid\": \"tp-2020-01-01-00000001\",\n  \"user_external_id\": \"{{tp_user_id}}\",\n  \"captured_at\": \"2020-01-01T00:00:00.000Z\",\n  \"club\": \"7i\",\n  \"ball_speed_mps\": 58.2,\n  \"launch_angle_deg\": 18.2,\n  \"carry_distance_m\": 142.3,\n  \"side_deviation_m\": -3.2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/trackpro", "host": ["{{base_url}}"], "path": ["v1","webhooks","trackpro"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/trackpro — 400 ball_speed_mps > 120",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 400', () => { pm.response.to.have.status(400); });",
+              "const b = pm.response.json();",
+              "pm.test('PAYLOAD_VALIDATION_FAILED', () => { pm.expect(b.error_code).to.eql('PAYLOAD_VALIDATION_FAILED'); });",
+              "pm.test('issues array present',      () => { pm.expect(b.issues).to.be.an('array'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shot_uid\": \"tp-2020-01-01-bad00001\",\n  \"user_external_id\": \"{{tp_user_id}}\",\n  \"captured_at\": \"2020-01-01T00:00:00.000Z\",\n  \"club\": \"7i\",\n  \"ball_speed_mps\": 999.9,\n  \"launch_angle_deg\": 18.2,\n  \"carry_distance_m\": 155.0,\n  \"side_deviation_m\": 0.5\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/trackpro", "host": ["{{base_url}}"], "path": ["v1","webhooks","trackpro"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks — SwingMetric",
+      "description": "Batch ingest. Happy-path requests generate ts_ms dynamically via pre-request scripts.",
+      "item": [
+        {
+          "name": "POST /v1/webhooks/swingmetric — V1 batch (2 shots)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('sm_ts_ms_1', Date.now() - 120000);",
+              "pm.collectionVariables.set('sm_ts_ms_2', Date.now() - 60000);"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "const b = pm.response.json();",
+              "pm.test('status accepted',      () => { pm.expect(b.status).to.eql('accepted'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"sm-sess-postman\",\n  \"player\": {\n    \"id\": \"{{sm_user_id}}\",\n    \"email\": \"alice@example.com\"\n  },\n  \"device\": \"SWING_PRO_002\",\n  \"shots\": [\n    {\n      \"ts_ms\": {{sm_ts_ms_1}},\n      \"club_used\": \"Driver\",\n      \"ball_speed_mph\": 152.4,\n      \"swing_speed_mph\": 104.2,\n      \"launch_deg\": 11.8,\n      \"spin_rpm\": 2840,\n      \"carry_yds\": 252,\n      \"total_yds\": 278,\n      \"offline_yds\": -4\n    },\n    {\n      \"ts_ms\": {{sm_ts_ms_2}},\n      \"club_used\": \"Driver\",\n      \"ball_speed_mph\": 149.8,\n      \"swing_speed_mph\": 103.1,\n      \"launch_deg\": 12.4,\n      \"spin_rpm\": 2910,\n      \"carry_yds\": 248,\n      \"total_yds\": 271,\n      \"offline_yds\": 7\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/swingmetric", "host": ["{{base_url}}"], "path": ["v1","webhooks","swingmetric"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/swingmetric — V1 retransmit shot 1 (same ts_ms → idempotent)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "pm.test('accepted', () => { pm.expect(pm.response.json().status).to.eql('accepted'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"sm-sess-postman\",\n  \"player\": {\n    \"id\": \"{{sm_user_id}}\",\n    \"email\": \"alice@example.com\"\n  },\n  \"device\": \"SWING_PRO_002\",\n  \"shots\": [\n    {\n      \"ts_ms\": {{sm_ts_ms_1}},\n      \"club_used\": \"Driver\",\n      \"ball_speed_mph\": 152.4,\n      \"swing_speed_mph\": 104.2,\n      \"launch_deg\": 11.8,\n      \"spin_rpm\": 2840,\n      \"carry_yds\": 252,\n      \"total_yds\": 278,\n      \"offline_yds\": -4\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/swingmetric", "host": ["{{base_url}}"], "path": ["v1","webhooks","swingmetric"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/swingmetric — V2 batch (club / launch_angle / carry_yd / offline_yd)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('sm_ts_ms_1', Date.now() - 600000);",
+              "pm.collectionVariables.set('sm_ts_ms_2', Date.now() - 540000);"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "const b = pm.response.json();",
+              "pm.test('status accepted',      () => { pm.expect(b.status).to.eql('accepted'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"sm-v2-sess-postman\",\n  \"player\": {\n    \"id\": \"{{sm_user_id}}\",\n    \"email\": \"alice@example.com\"\n  },\n  \"device\": \"SWING_ULTRA_001\",\n  \"shots\": [\n    {\n      \"ts_ms\": {{sm_ts_ms_1}},\n      \"club\": \"7I\",\n      \"ball_speed_mph\": 121.5,\n      \"swing_speed_mph\": 88.4,\n      \"launch_angle\": 22.8,\n      \"spin_rpm\": 7200,\n      \"carry_yd\": 158.0,\n      \"total_yd\": 172.0,\n      \"offline_yd\": -2.1\n    },\n    {\n      \"ts_ms\": {{sm_ts_ms_2}},\n      \"club\": \"Driver\",\n      \"ball_speed_mph\": 152.0,\n      \"swing_speed_mph\": 104.0,\n      \"launch_angle\": 11.5,\n      \"carry_yd\": 248.0,\n      \"offline_yd\": 3.5\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/swingmetric", "host": ["{{base_url}}"], "path": ["v1","webhooks","swingmetric"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/swingmetric — 422 stale ts_ms (clock skew)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 422', () => { pm.response.to.have.status(422); });",
+              "pm.test('CLOCK_SKEW_EXCESSIVE', () => { pm.expect(pm.response.json().error_code).to.eql('CLOCK_SKEW_EXCESSIVE'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"sm-old-sess\",\n  \"player\": { \"id\": \"{{sm_user_id}}\" },\n  \"device\": \"SWING_PRO_002\",\n  \"shots\": [{\n    \"ts_ms\": 1577836800000,\n    \"club_used\": \"Driver\",\n    \"ball_speed_mph\": 152.4,\n    \"launch_deg\": 11.8,\n    \"carry_yds\": 252,\n    \"offline_yds\": -4\n  }]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/swingmetric", "host": ["{{base_url}}"], "path": ["v1","webhooks","swingmetric"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/swingmetric — 400 empty shots array",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 400', () => { pm.response.to.have.status(400); });",
+              "const b = pm.response.json();",
+              "pm.test('PAYLOAD_VALIDATION_FAILED', () => { pm.expect(b.error_code).to.eql('PAYLOAD_VALIDATION_FAILED'); });",
+              "pm.test('issues array present',      () => { pm.expect(b.issues).to.be.an('array'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"sm-empty-test\",\n  \"player\": { \"id\": \"{{sm_user_id}}\" },\n  \"device\": \"SWING_PRO_002\",\n  \"shots\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/swingmetric", "host": ["{{base_url}}"], "path": ["v1","webhooks","swingmetric"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/swingmetric — 400 ball_speed_mph over max",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 400', () => { pm.response.to.have.status(400); });",
+              "pm.test('PAYLOAD_VALIDATION_FAILED', () => { pm.expect(pm.response.json().error_code).to.eql('PAYLOAD_VALIDATION_FAILED'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"sm-bad-speed\",\n  \"player\": { \"id\": \"{{sm_user_id}}\" },\n  \"device\": \"SWING_PRO_002\",\n  \"shots\": [{\n    \"ts_ms\": 1577836800000,\n    \"club_used\": \"Driver\",\n    \"ball_speed_mph\": 350,\n    \"launch_deg\": 11.8,\n    \"carry_yds\": 252,\n    \"offline_yds\": -4\n  }]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/swingmetric", "host": ["{{base_url}}"], "path": ["v1","webhooks","swingmetric"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks — ProSwing",
+      "description": "Single-shot ingest. V1/V2/V3 formats. Pre-request scripts generate fresh occurred_at.",
+      "item": [
+        {
+          "name": "POST /v1/webhooks/proswing — V1 7 iron (+10:00 tz offset)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "const d = new Date(Date.now() - 600000);",
+              "pm.collectionVariables.set('ps_occurred_at_1', d.toISOString());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "const b = pm.response.json();",
+              "pm.test('status accepted',      () => { pm.expect(b.status).to.eql('accepted'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"user_token\": \"{{ps_user_id}}\",\n    \"shot\": {\n      \"id\": \"ps-postman-v1-001\",\n      \"occurred_at\": \"{{ps_occurred_at_1}}\",\n      \"club_code\": \"I7\",\n      \"ball_speed\": { \"value\": 130.4, \"unit\": \"mph\" },\n      \"club_speed\": { \"value\": 86.1, \"unit\": \"mph\" },\n      \"launch\": { \"value\": 18.2, \"unit\": \"deg\" },\n      \"carry\": { \"value\": 156, \"unit\": \"yd\" },\n      \"total\": { \"value\": 169, \"unit\": \"yd\" },\n      \"deviation\": { \"value\": -3.5, \"unit\": \"yd\" }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/proswing — V1 driver in kph",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('ps_occurred_at_1', new Date(Date.now()-300000).toISOString());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "const b = pm.response.json();",
+              "pm.test('status accepted',      () => { pm.expect(b.status).to.eql('accepted'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"user_token\": \"{{ps_user_id}}\",\n    \"shot\": {\n      \"id\": \"ps-postman-kph-001\",\n      \"occurred_at\": \"{{ps_occurred_at_1}}\",\n      \"club_code\": \"DR\",\n      \"ball_speed\": { \"value\": 270.7, \"unit\": \"kph\" },\n      \"club_speed\": { \"value\": 181.5, \"unit\": \"kph\" },\n      \"launch\": { \"value\": 10.5, \"unit\": \"deg\" },\n      \"carry\": { \"value\": 240.0, \"unit\": \"m\" },\n      \"deviation\": { \"value\": 2.1, \"unit\": \"m\" }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/proswing — V2 flat (ball_speed_mph + launch_deg + carry_yd)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('ps_occurred_at_1', new Date(Date.now()-180000).toISOString());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "const b = pm.response.json();",
+              "pm.test('status accepted',      () => { pm.expect(b.status).to.eql('accepted'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"user_token\": \"{{ps_user_id}}\",\n    \"shot\": {\n      \"id\": \"ps-postman-v2-001\",\n      \"occurred_at\": \"{{ps_occurred_at_1}}\",\n      \"club_code\": \"6I\",\n      \"ball_speed_mph\": 132.5,\n      \"club_speed_mph\": 88.2,\n      \"launch_deg\": 19.5,\n      \"carry_yd\": 162.0,\n      \"total_yd\": 176.0,\n      \"deviation_yd\": -1.8\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/proswing — V2 flat ball_speed_kph",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('ps_occurred_at_1', new Date(Date.now()-90000).toISOString());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "pm.test('status accepted', () => { pm.expect(pm.response.json().status).to.eql('accepted'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"user_token\": \"{{ps_user_id}}\",\n    \"shot\": {\n      \"id\": \"ps-postman-v2kph-001\",\n      \"occurred_at\": \"{{ps_occurred_at_1}}\",\n      \"club_code\": \"5I\",\n      \"ball_speed_kph\": 214.0,\n      \"launch_deg\": 20.5,\n      \"carry_yd\": 172.0,\n      \"deviation_yd\": -1.2\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/proswing — V3 (player+device envelope, launch_angle scalar, spin_rpm)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('ps_occurred_at_1', new Date(Date.now()-120000).toISOString());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "const b = pm.response.json();",
+              "pm.test('status accepted',      () => { pm.expect(b.status).to.eql('accepted'); });",
+              "pm.test('correlation_id string', () => { pm.expect(b.correlation_id).to.be.a('string'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"player\": { \"id\": \"ps-v3-player-001\" },\n    \"device\": { \"id\": \"ps-v3-device-001\" },\n    \"shot\": {\n      \"id\": \"ps-postman-v3-001\",\n      \"occurred_at\": \"{{ps_occurred_at_1}}\",\n      \"club_code\": \"7I\",\n      \"ball_speed\": { \"value\": 129.5, \"unit\": \"mph\" },\n      \"club_speed\": { \"value\": 86.0, \"unit\": \"mph\" },\n      \"launch_angle\": 17.8,\n      \"spin_rpm\": 7200,\n      \"carry\": { \"value\": 155.6, \"unit\": \"yd\" },\n      \"deviation\": { \"value\": -4.0, \"unit\": \"ft\" }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/proswing — V3 without device (device optional)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('ps_occurred_at_1', new Date(Date.now()-60000).toISOString());"
+            ]}},
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 202', () => { pm.response.to.have.status(202); });",
+              "pm.test('status accepted', () => { pm.expect(pm.response.json().status).to.eql('accepted'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"player\": { \"id\": \"ps-v3-player-002\" },\n    \"shot\": {\n      \"id\": \"ps-postman-v3-002\",\n      \"occurred_at\": \"{{ps_occurred_at_1}}\",\n      \"club_code\": \"6I\",\n      \"ball_speed\": { \"value\": 130.0, \"unit\": \"mph\" },\n      \"launch_angle\": 19.0,\n      \"carry\": { \"value\": 160.0, \"unit\": \"yd\" },\n      \"deviation\": { \"value\": -2.0, \"unit\": \"yd\" }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/proswing — 422 stale occurred_at (clock skew)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 422', () => { pm.response.to.have.status(422); });",
+              "pm.test('CLOCK_SKEW_EXCESSIVE', () => { pm.expect(pm.response.json().error_code).to.eql('CLOCK_SKEW_EXCESSIVE'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"user_token\": \"{{ps_user_id}}\",\n    \"shot\": {\n      \"id\": \"ps-old-shot-2020\",\n      \"occurred_at\": \"2020-01-01T00:00:00.000Z\",\n      \"club_code\": \"7I\",\n      \"ball_speed\": { \"value\": 130.0, \"unit\": \"mph\" },\n      \"launch\": { \"value\": 18.0, \"unit\": \"deg\" },\n      \"carry\": { \"value\": 155.0, \"unit\": \"yd\" },\n      \"deviation\": { \"value\": -3.0, \"unit\": \"yd\" }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/proswing — 400 unit-mistag (ball_speed mps=180 > 120)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 400', () => { pm.response.to.have.status(400); });",
+              "const b = pm.response.json();",
+              "pm.test('PAYLOAD_VALIDATION_FAILED', () => { pm.expect(b.error_code).to.eql('PAYLOAD_VALIDATION_FAILED'); });",
+              "pm.test('mps mistag message',        () => { pm.expect(JSON.stringify(b.issues)).to.include('mps cannot exceed 120'); });",
+              "pm.test('issues array present',       () => { pm.expect(b.issues).to.be.an('array'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"user_token\": \"{{ps_user_id}}\",\n    \"shot\": {\n      \"id\": \"ps-bad-unit\",\n      \"occurred_at\": \"2020-01-01T10:00:00.000Z\",\n      \"club_code\": \"DR\",\n      \"ball_speed\": { \"value\": 180, \"unit\": \"mps\" },\n      \"launch\": { \"value\": 10.5, \"unit\": \"deg\" },\n      \"carry\": { \"value\": 240.0, \"unit\": \"m\" },\n      \"deviation\": { \"value\": 2.1, \"unit\": \"m\" }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        },
+        {
+          "name": "POST /v1/webhooks/proswing — 400 missing required field (no ball_speed)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status 400', () => { pm.response.to.have.status(400); });",
+              "pm.test('PAYLOAD_VALIDATION_FAILED', () => { pm.expect(pm.response.json().error_code).to.eql('PAYLOAD_VALIDATION_FAILED'); });"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shot.recorded\",\n  \"data\": {\n    \"user_token\": \"{{ps_user_id}}\",\n    \"shot\": {\n      \"id\": \"ps-no-speed\",\n      \"occurred_at\": \"2020-01-01T10:00:00.000Z\",\n      \"club_code\": \"7I\",\n      \"launch\": { \"value\": 17.8, \"unit\": \"deg\" },\n      \"carry\": { \"value\": 155.6, \"unit\": \"yd\" },\n      \"deviation\": { \"value\": -4.0, \"unit\": \"ft\" }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/v1/webhooks/proswing", "host": ["{{base_url}}"], "path": ["v1","webhooks","proswing"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Query — Shots",
+      "item": [
+        {
+          "name": "GET /v1/users/by-vendor/trackpro/:id/shots — all shots",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/trackpro/{{tp_user_id}}/shots?limit=20", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","trackpro","{{tp_user_id}}","shots"], "query": [{ "key": "limit", "value": "20" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('data array',  () => { pm.expect(b.data).to.be.an('array'); });",
+            "pm.test('paging object', () => { pm.expect(b.paging).to.be.an('object'); });",
+            "if (b.data.length > 0) {",
+            "  pm.test('raw_payload stripped',       () => { pm.expect(b.data[0].raw_payload).to.be.undefined; });",
+            "  pm.test('canonical_shot_id present',  () => { pm.expect(b.data[0].canonical_shot_id).to.be.a('string'); });",
+            "}"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/by-vendor/swingmetric/:id/shots — all shots",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/swingmetric/{{sm_user_id}}/shots?limit=20", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","swingmetric","{{sm_user_id}}","shots"], "query": [{ "key": "limit", "value": "20" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('data array',  () => { pm.expect(b.data).to.be.an('array'); });",
+            "pm.test('paging object', () => { pm.expect(b.paging).to.be.an('object'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/by-vendor/proswing/:id/shots — all shots",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/proswing/{{ps_user_id}}/shots?limit=20", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","proswing","{{ps_user_id}}","shots"], "query": [{ "key": "limit", "value": "20" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('data array',  () => { pm.expect(b.data).to.be.an('array'); });",
+            "pm.test('paging object', () => { pm.expect(b.paging).to.be.an('object'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/by-vendor/trackpro/:id/shots — filter by club (7I)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/trackpro/{{tp_user_id}}/shots?club=7I&limit=10", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","trackpro","{{tp_user_id}}","shots"], "query": [{ "key": "club", "value": "7I" }, { "key": "limit", "value": "10" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('all shots are 7I', () => { b.data.forEach(s => pm.expect(s.club_code).to.eql('7I')); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/:canonical_user_id/shots — by canonical ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/{{canonical_user_id}}/shots", "host": ["{{base_url}}"], "path": ["v1","users","{{canonical_user_id}}","shots"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "pm.test('data array', () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Query — Stats",
+      "item": [
+        {
+          "name": "GET /v1/users/by-vendor/trackpro/:id/stats — all clubs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/trackpro/{{tp_user_id}}/stats", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","trackpro","{{tp_user_id}}","stats"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('totals object',  () => { pm.expect(b.totals).to.be.an('object'); });",
+            "pm.test('by_club array',  () => { pm.expect(b.by_club).to.be.an('array'); });",
+            "pm.test('window object',  () => { pm.expect(b.window).to.be.an('object'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/by-vendor/trackpro/:id/stats — 7I only",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/trackpro/{{tp_user_id}}/stats?club=7I", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","trackpro","{{tp_user_id}}","stats"], "query": [{ "key": "club", "value": "7I" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('totals object', () => { pm.expect(b.totals).to.be.an('object'); });",
+            "pm.test('by_club array', () => { pm.expect(b.by_club).to.be.an('array'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/by-vendor/swingmetric/:id/stats — all clubs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/swingmetric/{{sm_user_id}}/stats", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","swingmetric","{{sm_user_id}}","stats"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('totals object', () => { pm.expect(b.totals).to.be.an('object'); });",
+            "pm.test('by_club array', () => { pm.expect(b.by_club).to.be.an('array'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/by-vendor/proswing/:id/stats — all clubs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/proswing/{{ps_user_id}}/stats", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","proswing","{{ps_user_id}}","stats"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('totals object', () => { pm.expect(b.totals).to.be.an('object'); });",
+            "pm.test('by_club array', () => { pm.expect(b.by_club).to.be.an('array'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/:canonical_user_id/stats — canonical user (cross-vendor)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/{{canonical_user_id}}/stats", "host": ["{{base_url}}"], "path": ["v1","users","{{canonical_user_id}}","stats"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "const b = pm.response.json();",
+            "pm.test('totals object', () => { pm.expect(b.totals).to.be.an('object'); });",
+            "pm.test('by_club array', () => { pm.expect(b.by_club).to.be.an('array'); });",
+            "pm.test('window object', () => { pm.expect(b.window).to.be.an('object'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/by-vendor/trackpro/:id/stats — custom date window",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/by-vendor/trackpro/{{tp_user_id}}/stats?since=2026-01-01T00:00:00Z&until=2026-12-31T23:59:59Z", "host": ["{{base_url}}"], "path": ["v1","users","by-vendor","trackpro","{{tp_user_id}}","stats"], "query": [{ "key": "since", "value": "2026-01-01T00:00:00Z" }, { "key": "until", "value": "2026-12-31T23:59:59Z" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "pm.test('totals object', () => { pm.expect(pm.response.json().totals).to.be.an('object'); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Identity",
+      "item": [
+        {
+          "name": "POST /v1/users/:canonical_user_id/identities — link TrackPro",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",    "value": "application/json" },
+              { "key": "Authorization",   "value": "Bearer {{internal_api_key}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"vendor\":\"trackpro\",\"vendor_user_id\":\"{{tp_user_id}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/v1/users/{{canonical_user_id}}/identities", "host": ["{{base_url}}"], "path": ["v1","users","{{canonical_user_id}}","identities"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 201', () => { pm.response.to.have.status(201); });",
+            "const b = pm.response.json();",
+            "pm.test('canonical_user_id matches', () => { pm.expect(b.canonical_user_id).to.eql(pm.collectionVariables.get('canonical_user_id')); });",
+            "pm.test('vendor is trackpro',        () => { pm.expect(b.vendor).to.eql('trackpro'); });"
+          ]}}]
+        },
+        {
+          "name": "POST /v1/users/:canonical_user_id/identities — link SwingMetric",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",    "value": "application/json" },
+              { "key": "Authorization",   "value": "Bearer {{internal_api_key}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"vendor\":\"swingmetric\",\"vendor_user_id\":\"{{sm_user_id}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/v1/users/{{canonical_user_id}}/identities", "host": ["{{base_url}}"], "path": ["v1","users","{{canonical_user_id}}","identities"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 201', () => { pm.response.to.have.status(201); });",
+            "pm.test('vendor is swingmetric', () => { pm.expect(pm.response.json().vendor).to.eql('swingmetric'); });"
+          ]}}]
+        },
+        {
+          "name": "POST /v1/users/:canonical_user_id/identities — link ProSwing",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",    "value": "application/json" },
+              { "key": "Authorization",   "value": "Bearer {{internal_api_key}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"vendor\":\"proswing\",\"vendor_user_id\":\"{{ps_user_id}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/v1/users/{{canonical_user_id}}/identities", "host": ["{{base_url}}"], "path": ["v1","users","{{canonical_user_id}}","identities"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 201', () => { pm.response.to.have.status(201); });",
+            "pm.test('vendor is proswing', () => { pm.expect(pm.response.json().vendor).to.eql('proswing'); });"
+          ]}}]
+        },
+        {
+          "name": "GET /v1/users/:canonical_user_id/identities — list linked",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/{{canonical_user_id}}/identities", "host": ["{{base_url}}"], "path": ["v1","users","{{canonical_user_id}}","identities"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "pm.test('body is array', () => { pm.expect(pm.response.json()).to.be.an('array'); });",
+            "pm.test('≥3 vendors',    () => { pm.expect(pm.response.json().length).to.be.at.least(3); });"
+          ]}}]
+        },
+        {
+          "name": "DELETE /v1/users/:canonical_user_id/identities/trackpro/:vendor_user_id — unlink",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/{{canonical_user_id}}/identities/trackpro/{{tp_user_id}}", "host": ["{{base_url}}"], "path": ["v1","users","{{canonical_user_id}}","identities","trackpro","{{tp_user_id}}"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 204', () => { pm.response.to.have.status(204); });"
+          ]}}]
+        },
+        {
+          "name": "DELETE /v1/users/:canonical_user_id/identities/trackpro/:vendor_user_id — 404 already unlinked",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internal_api_key}}" }],
+            "url": { "raw": "{{base_url}}/v1/users/{{canonical_user_id}}/identities/trackpro/{{tp_user_id}}", "host": ["{{base_url}}"], "path": ["v1","users","{{canonical_user_id}}","identities","trackpro","{{tp_user_id}}"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 404', () => { pm.response.to.have.status(404); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "item": [
+        {
+          "name": "GET /metrics — Prometheus text",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/metrics", "host": ["{{base_url}}"], "path": ["metrics"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => { pm.response.to.have.status(200); });",
+            "pm.test('pureplay_ingest_shots_total present', () => { pm.expect(pm.response.text()).to.include('pureplay_ingest_shots_total'); });",
+            "pm.test('content-type text/plain', () => { pm.expect(pm.response.headers.get('content-type')).to.include('text/plain'); });"
+          ]}}]
+        }
+      ]
+    }
+  ]
+}

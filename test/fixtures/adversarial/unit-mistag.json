@@ -1,0 +1,16 @@
+{
+  "type": "shot.recorded",
+  "data": {
+    "user_token": "ps_tok_adversarial_001",
+    "shot": {
+      "id": "ps-adversarial-001",
+      "occurred_at": "2026-05-18T10:30:00Z",
+      "club_code": "DR",
+      "ball_speed": { "value": 180.0, "unit": "mps" },
+      "launch": { "value": 10.5, "unit": "deg" },
+      "carry": { "value": 280.0, "unit": "yd" },
+      "total": { "value": 295.0, "unit": "yd" },
+      "deviation": { "value": 1.0, "unit": "yd" }
+    }
+  }
+}

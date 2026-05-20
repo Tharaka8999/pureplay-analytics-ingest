@@ -1,0 +1,21 @@
+{
+  "session_id": "sm-sess-2026051810",
+  "player": {
+    "id": "swing-user-A",
+    "email": "alice@example.com"
+  },
+  "device": "SWING_PRO_002",
+  "shots": [
+    {
+      "ts_ms": 1779099398451,
+      "club_used": "Driver",
+      "ball_speed_mph": 152.4,
+      "swing_speed_mph": 104.2,
+      "launch_deg": 11.8,
+      "spin_rpm": 2840,
+      "carry_yds": 252,
+      "total_yds": 278,
+      "offline_yds": -4
+    }
+  ]
+}

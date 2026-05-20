@@ -1,0 +1,7 @@
+allowBuilds:
+  '@nestjs/core': true
+  '@scarf/scarf': false
+  '@swc/core': true
+  better-sqlite3: true
+  msgpackr-extract: true
+  protobufjs: true

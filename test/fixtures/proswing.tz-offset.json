@@ -1,0 +1,17 @@
+{
+  "type": "shot.recorded",
+  "data": {
+    "user_token": "ps_tok_b2a14e7c91f0",
+    "shot": {
+      "id": "ps_shot_001",
+      "occurred_at": "2026-05-18T20:14:22+10:00",
+      "club_code": "I7",
+      "ball_speed": { "value": 130.4, "unit": "mph" },
+      "club_speed": { "value": 86.1, "unit": "mph" },
+      "launch": { "value": 18.2, "unit": "deg" },
+      "carry": { "value": 156, "unit": "yd" },
+      "total": { "value": 169, "unit": "yd" },
+      "deviation": { "value": -3.5, "unit": "yd" }
+    }
+  }
+}

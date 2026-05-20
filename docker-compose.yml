@@ -1,0 +1,238 @@
+services:
+
+  # ──────────────────────────────────────────────
+  # PostgreSQL 15 — primary data store
+  # 512 MB limit keeps it lean for dev/staging;
+  # bump to 1-2 GB in prod with more WAL buffers.
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: pureplay
+      POSTGRES_PASSWORD: pureplay
+      POSTGRES_DB: pureplay_ingest
+      # Performance tuning scoped to the 512 MB container limit
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    command: >
+      postgres
+        -c shared_buffers=128MB
+        -c effective_cache_size=384MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=64MB
+        -c max_connections=50
+        -c wal_buffers=16MB
+        -c checkpoint_completion_target=0.9
+        -c log_min_duration_statement=200
+        -c log_connections=off
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pureplay -d pureplay_ingest"]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ──────────────────────────────────────────────
+  # Redis 7.2 — BullMQ job queue
+  # AOF persistence (appendonly + fsync=everysec)
+  # ensures queued jobs survive a Redis restart.
+  # noeviction prevents silent job loss under
+  # memory pressure — 503 is better than data loss.
+  # ──────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    command: >
+      redis-server
+        --maxmemory 128mb
+        --maxmemory-policy noeviction
+        --appendonly yes
+        --appendfsync everysec
+        --auto-aof-rewrite-percentage 100
+        --auto-aof-rewrite-min-size 64mb
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+        reservations:
+          memory: 128m
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ──────────────────────────────────────────────
+  # API — HTTP process (Fastify + NestJS)
+  # NODE_OPTIONS=--max-old-space-size=384 ensures
+  # V8 heap stays under the 512 MB container limit.
+  # ──────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    ports:
+      - "3000:3000"
+    # [SEC] Container hardening — follows CIS Docker Benchmark
+    read_only: true
+    tmpfs:
+      - /tmp                  # Node.js may need a writable /tmp for sockets
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # [SEC] NODE_ENV=test — this compose file is LOCAL DEV / CI ONLY.
+      # 'test' mode: JSON logging (no pino-pretty), no production guards,
+      # allows WEBHOOK_AUTH_MODE=none and unset INTERNAL_API_KEY.
+      # Production deployments must set:
+      #   NODE_ENV=production
+      #   WEBHOOK_AUTH_MODE=api_key or hmac
+      #   INTERNAL_API_KEY=<min-32-char-secret>
+      #   THROTTLE_ENABLED=true
+      NODE_ENV: test
+      DATABASE_URL: postgresql://pureplay:pureplay@postgres:5432/pureplay_ingest
+      REDIS_URL: redis://redis:6379
+      WEBHOOK_AUTH_MODE: none
+      PORT: "3000"
+      RUN_MIGRATIONS: "true"
+      MAX_QUEUE_DEPTH: "10000"
+      OTEL_SERVICE_NAME: pureplay-analytics-ingest-api
+      # Set THROTTLE_ENABLED=false in a local .env file when running k6 load tests.
+      # Leave unset (defaults to true) in production.
+      THROTTLE_ENABLED: ${THROTTLE_ENABLED:-true}
+      # Override NODE_OPTIONS if needed at deploy time
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ──────────────────────────────────────────────
+  # Worker — BullMQ processor
+  # Two replicas: each runs 16 concurrent jobs
+  # (32 total), survives a single instance crash
+  # without queue stall, and doubles write headroom.
+  # BullMQ's distributed locking ensures a job is
+  # processed by exactly one replica at a time.
+  # ──────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    # [SEC] Container hardening — same policy as api
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # [SEC] NODE_ENV=test — see api service comment above.
+      NODE_ENV: test
+      DATABASE_URL: postgresql://pureplay:pureplay@postgres:5432/pureplay_ingest
+      REDIS_URL: redis://redis:6379
+      WEBHOOK_AUTH_MODE: none
+      WORKER_CONCURRENCY: "16"
+      OTEL_SERVICE_NAME: pureplay-analytics-ingest-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ──────────────────────────────────────────────
+  # [SEC] DEV ONLY — Adminer must NEVER be deployed in production.
+  # It exposes a full PostgreSQL admin UI with the hardcoded dev credentials
+  # (pureplay/pureplay) and no authentication beyond those credentials.
+  # In production: remove this service entirely or use a docker-compose.override.yml
+  # that does NOT include Adminer.
+  #
+  # Access: http://localhost:8080
+  # Server: postgres | User: pureplay | Pass: pureplay | DB: pureplay_ingest
+  # ──────────────────────────────────────────────
+  adminer:
+    image: adminer:4-standalone
+    ports:
+      - "127.0.0.1:8080:8080"  # bind to loopback only — not 0.0.0.0
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: dracula
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
+    restart: unless-stopped
+    profiles:
+      - dev  # only starts when: docker compose --profile dev up
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
