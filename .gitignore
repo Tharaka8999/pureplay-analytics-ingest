@@ -32,3 +32,6 @@ test-results/
 
 # TypeScript
 *.tsbuildinfo
+
+# Personal
+WALKTHROUGH_SCRIPT.md
