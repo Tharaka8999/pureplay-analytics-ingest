@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash } from "crypto";
 
 export interface ContentHashInput {
   vendor_user_id: string;
@@ -31,5 +31,5 @@ export function computeContentHash(input: ContentHashInput): string {
     round(input.lateral_m, 0).toFixed(0),
   ];
 
-  return createHash('sha256').update(parts.join('|')).digest('hex');
+  return createHash("sha256").update(parts.join("|")).digest("hex");
 }

@@ -212,13 +212,13 @@ export interface NormalisedShot {
 
 ### `ClubCode` — `src/shared/domain/club-code.ts`
 
-TypeScript union of all valid club codes. `normaliseClubCode(raw: string): ClubCode` handles common vendor aliases:
+TypeScript union of all valid club codes. `normaliseClub(raw: string): ClubCode` handles common vendor aliases:
 - `'7iron'` → `'7I'`
 - `'I7'` → `'7I'`
 - `'pitching wedge'` → `'PW'`
 - `'putter'` → `'PT'`
 
-Unknown strings return `'UK'` (unknown club).
+Unknown strings return `'UNKNOWN'` (not `'UK'`).
 
 ### Unit conversions — `src/shared/domain/units.ts`
 

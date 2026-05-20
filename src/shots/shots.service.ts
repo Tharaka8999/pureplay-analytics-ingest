@@ -1,15 +1,15 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { type Kysely, sql } from 'kysely';
-import type { Database } from '../shared/kysely/types';
-import { KYSELY } from '../shared/kysely/kysely.module';
-import { VALID_CLUB_CODES, type ClubCode } from '../shared/domain/club-code';
-import { VALID_VENDORS, type Vendor } from '../shared/domain/shot';
+import { Injectable, Inject } from "@nestjs/common";
+import { type Kysely, sql } from "kysely";
+import type { Database } from "../shared/kysely/types";
+import { KYSELY } from "../shared/kysely/kysely.module";
+import { VALID_CLUB_CODES, type ClubCode } from "../shared/domain/club-code";
+import { VALID_VENDORS, type Vendor } from "../shared/domain/shot";
 import {
   InvalidCursorError,
   InvalidDateError,
   UnknownVendorError,
   UnknownClubCodeError,
-} from '../shared/errors/domain-errors';
+} from "../shared/errors/domain-errors";
 
 export interface ShotsQuery {
   since?: string;
@@ -39,18 +39,26 @@ const DEFAULT_WINDOW_DAYS = 30;
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
 
-function encodeCursor(captured_at_utc: string, canonical_shot_id: string): string {
-  return Buffer.from(JSON.stringify({ captured_at_utc, canonical_shot_id })).toString('base64url');
+function encodeCursor(
+  captured_at_utc: string,
+  canonical_shot_id: string,
+): string {
+  return Buffer.from(
+    JSON.stringify({ captured_at_utc, canonical_shot_id }),
+  ).toString("base64url");
 }
 
 // [SEC] Try/catch guards against malformed base64url or JSON — previously threw 500.
-function decodeCursor(cursor: string): { captured_at_utc: string; canonical_shot_id: string } {
+function decodeCursor(cursor: string): {
+  captured_at_utc: string;
+  canonical_shot_id: string;
+} {
   try {
     const decoded = JSON.parse(
-      Buffer.from(cursor, 'base64url').toString('utf8'),
+      Buffer.from(cursor, "base64url").toString("utf8"),
     ) as Record<string, string>;
-    const captured_at_utc = decoded['captured_at_utc'];
-    const canonical_shot_id = decoded['canonical_shot_id'];
+    const captured_at_utc = decoded["captured_at_utc"];
+    const canonical_shot_id = decoded["canonical_shot_id"];
     if (!captured_at_utc || !canonical_shot_id) throw new InvalidCursorError();
     return { captured_at_utc, canonical_shot_id };
   } catch (err) {
@@ -64,7 +72,7 @@ function decodeCursor(cursor: string): { captured_at_utc: string; canonical_shot
  * Returns an ISO-8601 string, or throws BadRequestException for invalid input.
  * [SEC] Prevents non-date strings from reaching Kysely and causing silent type coercion.
  */
-function parseWindowDate(value: string, fieldName: 'since' | 'until'): string {
+function parseWindowDate(value: string, fieldName: "since" | "until"): string {
   const d = new Date(value);
   if (isNaN(d.getTime())) throw new InvalidDateError(fieldName, value);
   return d.toISOString();
@@ -74,7 +82,10 @@ function parseWindowDate(value: string, fieldName: 'since' | 'until'): string {
 export class ShotsService {
   constructor(@Inject(KYSELY) private readonly db: Kysely<Database>) {}
 
-  async listByCanonicalUser(userId: string, query: ShotsQuery): Promise<ShotsPage> {
+  async listByCanonicalUser(
+    userId: string,
+    query: ShotsQuery,
+  ): Promise<ShotsPage> {
     return this.executeQuery({ canonical_user_id: userId }, query);
   }
 
@@ -86,56 +97,74 @@ export class ShotsService {
     if (!VALID_VENDORS.includes(vendor as Vendor)) {
       throw new UnknownVendorError(vendor, VALID_VENDORS);
     }
-    return this.executeQuery({ vendor: vendor as Vendor, vendor_user_id: vendorUserId }, query);
+    return this.executeQuery(
+      { vendor: vendor as Vendor, vendor_user_id: vendorUserId },
+      query,
+    );
   }
 
   private async executeQuery(
-    filter: { canonical_user_id?: string; vendor?: Vendor; vendor_user_id?: string },
+    filter: {
+      canonical_user_id?: string;
+      vendor?: Vendor;
+      vendor_user_id?: string;
+    },
     query: ShotsQuery,
   ): Promise<ShotsPage> {
-    const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+    const rawLimit = query.limit ?? DEFAULT_LIMIT;
+    const limit = isNaN(rawLimit)
+      ? DEFAULT_LIMIT
+      : Math.min(rawLimit, MAX_LIMIT);
     const includeNearDuplicates = query.include_near_duplicates ?? false;
 
     const now = new Date().toISOString();
     const since = query.since
-      ? parseWindowDate(query.since, 'since')
+      ? parseWindowDate(query.since, "since")
       : new Date(Date.now() - DEFAULT_WINDOW_DAYS * 86400 * 1000).toISOString();
-    const until = query.until ? parseWindowDate(query.until, 'until') : now;
+    const until = query.until ? parseWindowDate(query.until, "until") : now;
 
-    if (query.club && !(VALID_CLUB_CODES as readonly string[]).includes(query.club)) {
+    if (
+      query.club &&
+      !(VALID_CLUB_CODES as readonly string[]).includes(query.club)
+    ) {
       throw new UnknownClubCodeError(query.club, VALID_CLUB_CODES);
     }
     // query.club is validated above — safe to cast to ClubCode for Kysely
     const club = query.club as ClubCode | undefined;
 
     let qb = this.db
-      .selectFrom('shots')
+      .selectFrom("shots")
       .selectAll()
-      .where('captured_at_utc', '>=', since)
-      .where('captured_at_utc', '<=', until);
+      .where("captured_at_utc", ">=", since)
+      .where("captured_at_utc", "<=", until);
 
     if (filter.canonical_user_id) {
-      qb = qb.where('canonical_user_id', '=', filter.canonical_user_id);
+      qb = qb.where("canonical_user_id", "=", filter.canonical_user_id);
     }
     if (filter.vendor) {
-      qb = qb.where('vendor', '=', filter.vendor);
+      qb = qb.where("vendor", "=", filter.vendor);
     }
     if (filter.vendor_user_id) {
-      qb = qb.where('vendor_user_id', '=', filter.vendor_user_id);
+      qb = qb.where("vendor_user_id", "=", filter.vendor_user_id);
     }
     if (club) {
-      qb = qb.where('club_code', '=', club);
+      qb = qb.where("club_code", "=", club);
     }
     if (!includeNearDuplicates) {
-      qb = qb.where('duplicate_of', 'is', null);
+      qb = qb.where("duplicate_of", "is", null);
     }
 
     if (query.cursor) {
       const { captured_at_utc, canonical_shot_id } = decodeCursor(query.cursor);
-      qb = qb.where(sql`(captured_at_utc, canonical_shot_id) < (${captured_at_utc}, ${canonical_shot_id})` as never);
+      qb = qb.where(
+        sql`(captured_at_utc, canonical_shot_id) < (${captured_at_utc}, ${canonical_shot_id})` as never,
+      );
     }
 
-    qb = qb.orderBy('captured_at_utc', 'desc').orderBy('canonical_shot_id', 'desc').limit(limit + 1);
+    qb = qb
+      .orderBy("captured_at_utc", "desc")
+      .orderBy("canonical_shot_id", "desc")
+      .limit(limit + 1);
 
     const rows = await qb.execute();
     const hasMore = rows.length > limit;

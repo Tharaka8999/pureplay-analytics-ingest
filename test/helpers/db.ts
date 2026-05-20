@@ -1,36 +1,40 @@
-import { Kysely, PostgresDialect } from 'kysely';
-import pg from 'pg';
-import Redis from 'ioredis';
-import { runMigrations } from '../../src/shared/kysely/migration-runner';
-import type { Database } from '../../src/shared/kysely/types';
+import { Kysely, PostgresDialect } from "kysely";
+import { Pool, types } from "pg";
+import Redis from "ioredis";
+import { runMigrations } from "../../src/shared/kysely/migration-runner";
+import type { Database } from "../../src/shared/kysely/types";
 
 const TEST_DB_URL =
-  process.env['DATABASE_URL'] ??
-  'postgresql://pureplay:pureplay@localhost:5432/pureplay_ingest';
+  process.env["DATABASE_URL"] ??
+  "postgresql://pureplay:pureplay@localhost:5432/pureplay_ingest";
 
-const TEST_REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+const TEST_REDIS_URL = process.env["REDIS_URL"] ?? "redis://localhost:6379";
 
 // Configure timestamp type parsers (mirrors kysely.module.ts).
-pg.types.setTypeParser(pg.types.builtins.TIMESTAMPTZ, (val: string) =>
+// Must use named import `types` from 'pg', not `pg.types` from the default import.
+types.setTypeParser(types.builtins.TIMESTAMPTZ, (val: string) =>
   val ? new Date(val).toISOString() : null,
 );
-pg.types.setTypeParser(pg.types.builtins.TIMESTAMP, (val: string) =>
+types.setTypeParser(types.builtins.TIMESTAMP, (val: string) =>
   val ? new Date(val).toISOString() : null,
 );
 
 export async function createTestKysely(): Promise<Kysely<Database>> {
-  const pool = new pg.Pool({ connectionString: TEST_DB_URL, max: 5 });
+  const pool = new Pool({ connectionString: TEST_DB_URL, max: 5 });
   const db = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) });
   await runMigrations(db);
   return db;
 }
 
 export async function truncateAll(db: Kysely<Database>): Promise<void> {
-  // Order matters: ingestion_failures has no FK, shots has self-referencing FK.
-  // Delete dependent rows first to avoid FK violations.
-  await db.deleteFrom('ingestion_failures').execute();
-  await db.updateTable('shots').set({ duplicate_of: null }).execute();
-  await db.deleteFrom('shots').execute();
+  // Order matters: respect FK constraints. Clear outbox + audit first (no FK deps
+  // on other tables from them), then identity tables, then shots (self-ref FK).
+  await db.deleteFrom("outbox_events").execute();
+  await db.deleteFrom("audit_log").execute();
+  await db.deleteFrom("ingestion_failures").execute();
+  await db.deleteFrom("user_identities").execute();
+  await db.updateTable("shots").set({ duplicate_of: null }).execute();
+  await db.deleteFrom("shots").execute();
 }
 
 export async function flushTestRedis(): Promise<void> {
@@ -52,28 +56,30 @@ export async function flushTestRedis(): Promise<void> {
  */
 export function freshenFixture(
   payload: Record<string, unknown>,
-  vendor: 'trackpro' | 'swingmetric' | 'proswing',
+  vendor: "trackpro" | "swingmetric" | "proswing",
 ): Record<string, unknown> {
   // 1 hour ago is always within the 24h window and never in the future.
   const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
 
   switch (vendor) {
-    case 'trackpro':
+    case "trackpro":
       return { ...payload, captured_at: oneHourAgo };
 
-    case 'proswing': {
-      const data = payload['data'] as Record<string, unknown>;
-      const shot = data['shot'] as Record<string, unknown>;
+    case "proswing": {
+      const data = payload["data"] as Record<string, unknown>;
+      const shot = data["shot"] as Record<string, unknown>;
       // Preserve the original tz offset string (e.g. "+10:00") so the parser can
       // derive captured_at_tz_offset_min correctly.  We rewrite only the date/time
       // part while keeping whatever suffix the fixture declared.
-      const existingOccurredAt = shot['occurred_at'] as string ?? oneHourAgo;
+      const existingOccurredAt = (shot["occurred_at"] as string) ?? oneHourAgo;
       const tzSuffixMatch = /([+-]\d{2}:\d{2})$/.exec(existingOccurredAt);
-      const tzSuffix = tzSuffixMatch?.[1] ?? '+00:00';
-      const offsetMinutes = tzSuffix === '+00:00'
-        ? 0
-        : (parseInt(tzSuffix.slice(1, 3), 10) * 60 + parseInt(tzSuffix.slice(4, 6), 10)) *
-          (tzSuffix[0] === '-' ? -1 : 1);
+      const tzSuffix = tzSuffixMatch?.[1] ?? "+00:00";
+      const offsetMinutes =
+        tzSuffix === "+00:00"
+          ? 0
+          : (parseInt(tzSuffix.slice(1, 3), 10) * 60 +
+              parseInt(tzSuffix.slice(4, 6), 10)) *
+            (tzSuffix[0] === "-" ? -1 : 1);
       // Express the "1 hour ago" moment in the fixture's original local timezone.
       const localMs = Date.now() - 3_600_000 + offsetMinutes * 60_000;
       const local = new Date(localMs).toISOString().slice(0, 19); // "YYYY-MM-DDTHH:mm:ss"
@@ -84,8 +90,8 @@ export function freshenFixture(
       };
     }
 
-    case 'swingmetric': {
-      const shots = payload['shots'] as Array<Record<string, unknown>>;
+    case "swingmetric": {
+      const shots = payload["shots"] as Array<Record<string, unknown>>;
       const tsMs = Date.now() - 3_600_000;
       return {
         ...payload,

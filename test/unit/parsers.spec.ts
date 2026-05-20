@@ -276,7 +276,7 @@ describe("ProSwing parser — V1 (nested {value, unit} measurements)", () => {
     const canonical = parseProswingRaw(raw);
     const [shot] = parseProswing(canonical, RECEIVED_AT);
     expect(shot!.vendor).toBe("proswing");
-    expect(shot!.idempotency_key).toBe("ps|ps_shot_001");
+    expect(shot!.idempotency_key).toBe("ps|ps_tok_b2a14e7c91f0|ps_shot_001");
   });
 
   it("uses user_token as vendor_user_id", () => {
@@ -381,7 +381,9 @@ describe("ProSwing parser — V2 flat (ball_speed_mph / launch_deg / carry_yd / 
     const [shot] = parseProswing(canonical, RECEIVED_AT);
     expect(shot!.vendor).toBe("proswing");
     expect(shot!.vendor_user_id).toBe("ps_tok_v2_a1b2c3d4ef");
-    expect(shot!.idempotency_key).toBe("ps|ps_v2_shot_001");
+    expect(shot!.idempotency_key).toBe(
+      "ps|ps_tok_v2_a1b2c3d4ef|ps_v2_shot_001",
+    );
   });
 
   it("converts ball_speed_mph through parser", () => {

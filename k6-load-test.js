@@ -135,7 +135,10 @@ const scenarios = {
 // At peak (3× sustained load, 144 shots/s) latency budgets are relaxed.
 // The NFR floor is 32 shots/s; peak intentionally exceeds it and SLA degradation
 // is expected. All other scenarios use the tighter NFR-aligned budgets.
-const isPeak = SCENARIO === 'peak';
+const isPeak   = SCENARIO === 'peak';
+// Stress intentionally drives past MAX_QUEUE_DEPTH — 503 backpressure responses
+// are expected and correct. Allow up to 10% errors in stress mode.
+const isStress = SCENARIO === 'stress';
 
 export const options = {
   scenarios: {
@@ -145,19 +148,19 @@ export const options = {
     // Overall P95/P99 in the load scenario
     'http_req_duration{scenario:load}': ['p(95)<500', 'p(99)<1000'],
 
-    // Per-endpoint latency budgets — tighter at NFR load, relaxed at peak burst
-    'http_req_duration{name:ingest_trackpro}':       [isPeak ? 'p(95)<500' : 'p(95)<300'],
-    'http_req_duration{name:ingest_swingmetric}':    [isPeak ? 'p(95)<500' : 'p(95)<300'],
-    'http_req_duration{name:ingest_proswing}':       [isPeak ? 'p(95)<500' : 'p(95)<300'],
-    'http_req_duration{name:query_stats_canonical}': [isPeak ? 'p(95)<1200' : 'p(95)<800'],
-    'http_req_duration{name:query_stats_vendor}':    [isPeak ? 'p(95)<1200' : 'p(95)<800'],
-    'http_req_duration{name:identity_list}':         [isPeak ? 'p(95)<500'  : 'p(95)<200'],
-    'http_req_duration{name:identity_link}':         [isPeak ? 'p(95)<700'  : 'p(95)<200'],
+    // Per-endpoint latency budgets — tighter at NFR load, relaxed at peak/stress
+    'http_req_duration{name:ingest_trackpro}':       [(isPeak || isStress) ? 'p(95)<500' : 'p(95)<300'],
+    'http_req_duration{name:ingest_swingmetric}':    [(isPeak || isStress) ? 'p(95)<500' : 'p(95)<300'],
+    'http_req_duration{name:ingest_proswing}':       [(isPeak || isStress) ? 'p(95)<500' : 'p(95)<300'],
+    'http_req_duration{name:query_stats_canonical}': [(isPeak || isStress) ? 'p(95)<1200' : 'p(95)<800'],
+    'http_req_duration{name:query_stats_vendor}':    [(isPeak || isStress) ? 'p(95)<1200' : 'p(95)<800'],
+    'http_req_duration{name:identity_list}':         [(isPeak || isStress) ? 'p(95)<500'  : 'p(95)<200'],
+    'http_req_duration{name:identity_link}':         [(isPeak || isStress) ? 'p(95)<700'  : 'p(95)<200'],
 
-    // Error-rate gates — same across all scenarios
-    http_req_failed:     ['rate<0.01'],
-    ingest_success_rate: ['rate>0.99'],
-    identity_op_success: ['rate>0.99'],
+    // Error-rate gates — stress allows up to 10% (503 backpressure is expected/correct)
+    http_req_failed:     [isStress ? 'rate<0.10' : 'rate<0.01'],
+    ingest_success_rate: [isStress ? 'rate>0.90' : 'rate>0.99'],
+    identity_op_success: [isStress ? 'rate>0.90' : 'rate>0.99'],
   },
 };
 
@@ -411,7 +414,7 @@ export default function () {
   // ── Step 3: Ingest ProSwing shot ──────────────────────────────────────────
   const psRes = http.post(
     `${V1}/webhooks/proswing`,
-    proswingPayload('ps-load-test-user'),  // user_token in the data envelope
+    proswingPayload('ps-load-test-user'),  // V1 format: data.user_token (V3 uses data.player.id)
     { headers: JSON_HEADERS, tags: { name: 'ingest_proswing' } },
   );
   const psOk = check(psRes, {
@@ -486,6 +489,12 @@ export default function () {
     'Canonical shots: has data array': (r) => {
       try { return Array.isArray(JSON.parse(r.body).data); } catch (_) { return false; }
     },
+    'Canonical shots: has paging.has_more': (r) => {
+      try { return typeof JSON.parse(r.body).paging?.has_more === 'boolean'; } catch (_) { return false; }
+    },
+    'Canonical shots: has meta': (r) => {
+      try { return JSON.parse(r.body).meta != null; } catch (_) { return false; }
+    },
     'Canonical shots: shots have canonical_user_id': (r) => {
       try {
         const data = JSON.parse(r.body).data;
@@ -534,10 +543,10 @@ export default function () {
 
   sleep(0.1);
 
-  // ── Step 9: Stats by vendor user ──────────────────────────────────────────
+  // ── Step 9: Stats by vendor user (with club filter to exercise param path) ─
   const vendorStatsStart = Date.now();
   const vendorStatsRes = http.get(
-    `${V1}/users/by-vendor/trackpro/load-test-user/stats`,
+    `${V1}/users/by-vendor/trackpro/load-test-user/stats?club=7I`,
     { headers: QUERY_HEADERS, tags: { name: 'query_stats_vendor' } },
   );
   queryLatency.add(Date.now() - vendorStatsStart);

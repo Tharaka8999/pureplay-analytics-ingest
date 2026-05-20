@@ -1,11 +1,11 @@
-import { Global, Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Kysely, PostgresDialect } from 'kysely';
-import { Pool, types } from 'pg';
-import type { Database } from './types';
-import type { Env } from '../../config/env.schema';
+import { Global, Module } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Kysely, PostgresDialect } from "kysely";
+import { Pool, types } from "pg";
+import type { Database } from "./types";
+import type { Env } from "../../config/env.schema";
 
-export const KYSELY = Symbol('KYSELY');
+export const KYSELY = Symbol("KYSELY");
 
 // Return timestamps as ISO-8601 strings rather than Date objects.
 // Keeps the entire codebase working with string timestamps consistently.
@@ -24,10 +24,10 @@ types.setTypeParser(types.builtins.TIMESTAMP, (val: string) =>
       provide: KYSELY,
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env>): Promise<Kysely<Database>> => {
-        const databaseUrl = config.get('DATABASE_URL', { infer: true })!;
+        const databaseUrl = config.get("DATABASE_URL", { infer: true })!;
         const pool = new Pool({
           connectionString: databaseUrl,
-          max: config.get('DB_POOL_MAX', { infer: true }) ?? 20,
+          max: config.get("DB_POOL_MAX", { infer: true }) ?? 20,
           // Keep a minimum of 5 warm connections to avoid cold-start latency on burst traffic.
           min: 5,
           idleTimeoutMillis: 30_000,

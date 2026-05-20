@@ -5,26 +5,26 @@
 // 'user_token'            — ProSwing top-level token
 // 'data.user_token'       — ProSwing data-nested token
 const BLOCKED_PATHS = [
-  'player.email',
-  'envelope.player.email',
-  'user_token',
-  'data.user_token',
+  "player.email",
+  "envelope.player.email",
+  "user_token",
+  "data.user_token",
 ] as const;
 
 // RFC5322-simplified email regex — catches the vast majority of real addresses.
-const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
 function deleteNestedPath(obj: Record<string, unknown>, path: string): void {
-  const parts = path.split('.');
+  const parts = path.split(".");
   let current: unknown = obj;
 
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i]!;
-    if (current === null || typeof current !== 'object') return;
+    if (current === null || typeof current !== "object") return;
     current = (current as Record<string, unknown>)[part];
   }
 
-  if (current !== null && typeof current === 'object') {
+  if (current !== null && typeof current === "object") {
     const lastPart = parts[parts.length - 1]!;
     delete (current as Record<string, unknown>)[lastPart];
   }
@@ -41,5 +41,5 @@ export function redactPii(payload: Record<string, unknown>): string {
 
   // Scrub any remaining email addresses from the serialised string
   const json = JSON.stringify(clone);
-  return json.replace(EMAIL_REGEX, '[REDACTED]');
+  return json.replace(EMAIL_REGEX, "[REDACTED]");
 }

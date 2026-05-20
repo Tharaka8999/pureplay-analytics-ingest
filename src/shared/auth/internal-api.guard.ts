@@ -1,14 +1,14 @@
-import { timingSafeEqual } from 'crypto';
+import { timingSafeEqual } from "crypto";
 import {
   Injectable,
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
   Logger,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { FastifyRequest } from 'fastify';
-import type { Env } from '../../config/env.schema';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import type { FastifyRequest } from "fastify";
+import type { Env } from "../../config/env.schema";
 
 /**
  * InternalApiGuard — protects query / stats / identity / metrics endpoints.
@@ -36,30 +36,34 @@ export class InternalApiGuard implements CanActivate {
   constructor(private readonly config: ConfigService<Env>) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const key = this.config.get('INTERNAL_API_KEY', { infer: true });
+    const key = this.config.get("INTERNAL_API_KEY", { infer: true });
 
     if (!key) {
       // In development, INTERNAL_API_KEY is optional. env.schema.ts superRefine()
       // blocks startup in production if the key is absent.
       this.logger.warn(
-        'INTERNAL_API_KEY is not set — query/identity/metrics endpoints are unprotected. ' +
-        'Set INTERNAL_API_KEY (min 32 chars) before deploying to production.',
+        "INTERNAL_API_KEY is not set — query/identity/metrics endpoints are unprotected. " +
+          "Set INTERNAL_API_KEY (min 32 chars) before deploying to production.",
       );
       return true;
     }
 
     const req = context.switchToHttp().getRequest<FastifyRequest>();
-    const authHeader = (req.headers as Record<string, string | undefined>)['authorization'];
-    const provided = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+    const authHeader = (req.headers as Record<string, string | undefined>)[
+      "authorization"
+    ];
+    const provided = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : undefined;
 
     if (!provided) {
       throw new UnauthorizedException(
-        'Authorization: Bearer <INTERNAL_API_KEY> header is required for this endpoint.',
+        "Authorization: Bearer <INTERNAL_API_KEY> header is required for this endpoint.",
       );
     }
 
-    const expectedBuf = Buffer.from(key, 'utf8');
-    const providedBuf = Buffer.from(provided, 'utf8');
+    const expectedBuf = Buffer.from(key, "utf8");
+    const providedBuf = Buffer.from(provided, "utf8");
 
     // [SEC] timingSafeEqual requires equal-length buffers.
     // Length mismatch is itself a definitive rejection — no need to compare.
@@ -67,8 +71,8 @@ export class InternalApiGuard implements CanActivate {
       expectedBuf.length !== providedBuf.length ||
       !timingSafeEqual(expectedBuf, providedBuf)
     ) {
-      this.logger.warn({ path: req.url }, 'Internal API key rejected');
-      throw new UnauthorizedException('Invalid internal API key.');
+      this.logger.warn({ path: req.url }, "Internal API key rejected");
+      throw new UnauthorizedException("Invalid internal API key.");
     }
 
     return true;

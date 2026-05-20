@@ -26,53 +26,62 @@ export abstract class DomainError extends Error {
 // ── Validation errors ──────────────────────────────────────────────────────
 
 export class InvalidCursorError extends DomainError {
-  readonly code = 'INVALID_CURSOR';
+  readonly code = "INVALID_CURSOR";
   constructor() {
-    super('Pagination cursor is malformed or expired.');
+    super("Pagination cursor is malformed or expired.");
   }
 }
 
 export class InvalidDateError extends DomainError {
-  readonly code = 'PAYLOAD_VALIDATION_FAILED';
-  constructor(field: 'since' | 'until', value: string) {
-    super(`Invalid date for '${field}': '${value}'. Must be a valid ISO-8601 datetime.`);
+  readonly code = "PAYLOAD_VALIDATION_FAILED";
+  constructor(field: "since" | "until", value: string) {
+    super(
+      `Invalid date for '${field}': '${value}'. Must be a valid ISO-8601 datetime.`,
+    );
   }
 }
 
 export class UnknownVendorError extends DomainError {
-  readonly code = 'PAYLOAD_VALIDATION_FAILED';
+  readonly code = "PAYLOAD_VALIDATION_FAILED";
   constructor(vendor: string, validVendors: readonly string[]) {
-    super(`Unknown vendor: ${vendor}. Valid values: ${validVendors.join(', ')}`);
+    super(
+      `Unknown vendor: ${vendor}. Valid values: ${validVendors.join(", ")}`,
+    );
   }
 }
 
 export class UnknownClubCodeError extends DomainError {
-  readonly code = 'PAYLOAD_VALIDATION_FAILED';
+  readonly code = "PAYLOAD_VALIDATION_FAILED";
   constructor(club: string, validCodes: readonly string[]) {
-    super(`Unknown club code: ${club}. Valid values: ${validCodes.join(', ')}`);
+    super(`Unknown club code: ${club}. Valid values: ${validCodes.join(", ")}`);
   }
 }
 
 // ── Not-found errors ───────────────────────────────────────────────────────
 
 export class IdentityNotFoundError extends DomainError {
-  readonly code = 'NOT_FOUND';
+  readonly code = "NOT_FOUND";
   constructor(vendor: string, vendorUserId: string, canonicalUserId: string) {
-    super(`Identity mapping not found: ${vendor}/${vendorUserId} → ${canonicalUserId}`);
+    super(
+      `Identity mapping not found: ${vendor}/${vendorUserId} → ${canonicalUserId}`,
+    );
   }
 }
 
 // ── HTTP status mapping ────────────────────────────────────────────────────
 
 /** Maps a DomainError to its HTTP status code and canonical error_code string. */
-export function domainErrorToHttp(err: DomainError): { status: number; errorCode: string } {
+export function domainErrorToHttp(err: DomainError): {
+  status: number;
+  errorCode: string;
+} {
   switch (err.code) {
-    case 'INVALID_CURSOR':
-    case 'PAYLOAD_VALIDATION_FAILED':
+    case "INVALID_CURSOR":
+    case "PAYLOAD_VALIDATION_FAILED":
       return { status: 400, errorCode: err.code };
-    case 'NOT_FOUND':
-      return { status: 404, errorCode: 'NOT_FOUND' };
+    case "NOT_FOUND":
+      return { status: 404, errorCode: "NOT_FOUND" };
     default:
-      return { status: 500, errorCode: 'INTERNAL_ERROR' };
+      return { status: 500, errorCode: "INTERNAL_ERROR" };
   }
 }

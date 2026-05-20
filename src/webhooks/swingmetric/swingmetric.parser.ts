@@ -1,14 +1,14 @@
-import { monotonicFactory } from 'ulidx';
-import { mphToMps, ydToM } from '../../shared/domain/units';
-import { normaliseClub } from '../../shared/domain/club-code';
-import { computeContentHash } from '../../ingestion/content-hash';
-import type { NormalisedShot } from '../../shared/domain/shot';
-import type { SwingmetricPayload, SwingmetricShot } from './swingmetric.schema';
+import { monotonicFactory } from "ulidx";
+import { mphToMps, ydToM } from "../../shared/domain/units";
+import { normaliseClub } from "../../shared/domain/club-code";
+import { computeContentHash } from "../../ingestion/content-hash";
+import type { NormalisedShot } from "../../shared/domain/shot";
+import type { SwingmetricPayload, SwingmetricShot } from "./swingmetric.schema";
 // Re-export schema for unit tests that validate it directly (parsers.spec.ts)
-export { SwingmetricPayloadSchema } from './swingmetric.schema';
+export { SwingmetricPayloadSchema } from "./swingmetric.schema";
 
 const ulid = monotonicFactory();
-const PARSER_VERSION = '1.0.0';
+const PARSER_VERSION = "1.0.0";
 
 /**
  * Parse a single normalised shot into a NormalisedShot.
@@ -32,7 +32,7 @@ function parseSingleShot(
 
   return {
     canonical_shot_id: ulid(),
-    vendor: 'swingmetric',
+    vendor: "swingmetric",
     vendor_shot_id: null,
     idempotency_key: idempotencyKey,
     vendor_user_id: payload.player.id,

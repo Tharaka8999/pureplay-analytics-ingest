@@ -1,12 +1,18 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, OnModuleInit, OnModuleDestroy, ServiceUnavailableException, Logger } from '@nestjs/common';
-import { Queue } from 'bullmq';
-import { ConfigService } from '@nestjs/config';
-import type { Env } from '../config/env.schema';
-import type { NormalisedShot } from '../shared/domain/shot';
-import { getQueueDepth } from '../shared/metrics/ingest-metrics';
+import { InjectQueue } from "@nestjs/bullmq";
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  ServiceUnavailableException,
+  Logger,
+} from "@nestjs/common";
+import { Queue } from "bullmq";
+import { ConfigService } from "@nestjs/config";
+import type { Env } from "../config/env.schema";
+import type { NormalisedShot } from "../shared/domain/shot";
+import { getQueueDepth } from "../shared/metrics/ingest-metrics";
 
-export const SHOT_INGESTION_QUEUE = 'shot-ingestion';
+export const SHOT_INGESTION_QUEUE = "shot-ingestion";
 
 export interface ShotJob {
   vendor: string;
@@ -27,7 +33,8 @@ export class ShotIngestionQueue implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     this.depthPollInterval = setInterval(() => {
-      this.queue.getWaitingCount()
+      this.queue
+        .getWaitingCount()
         .then((count) => {
           getQueueDepth().set(count);
         })
@@ -36,7 +43,7 @@ export class ShotIngestionQueue implements OnModuleInit, OnModuleDestroy {
           // Queue depth metrics stop updating until Redis recovers; this is acceptable.
           this.logger.warn(
             { err },
-            'Queue depth poll failed — metric stale until Redis recovers',
+            "Queue depth poll failed — metric stale until Redis recovers",
           );
         });
     }, 10_000);
@@ -51,20 +58,26 @@ export class ShotIngestionQueue implements OnModuleInit, OnModuleDestroy {
     correlationId: string,
     receivedAtUtc: string,
   ): Promise<{ jobId: string }> {
-    const maxDepth = this.config.get('MAX_QUEUE_DEPTH', { infer: true }) ?? 10000;
+    const maxDepth =
+      this.config.get("MAX_QUEUE_DEPTH", { infer: true }) ?? 10000;
     const waiting = await this.queue.getWaitingCount();
 
     if (waiting >= maxDepth) {
       throw new ServiceUnavailableException({
-        error_code: 'SERVICE_UNAVAILABLE',
-        message: 'Queue is at capacity. Retry after 30 seconds.',
+        error_code: "SERVICE_UNAVAILABLE",
+        message: "Queue is at capacity. Retry after 30 seconds.",
         retryAfter: 30,
       });
     }
 
     const job = await this.queue.add(
-      'normalise',
-      { vendor: shot.vendor, normalisedShot: shot, correlationId, receivedAtUtc },
+      "normalise",
+      {
+        vendor: shot.vendor,
+        normalisedShot: shot,
+        correlationId,
+        receivedAtUtc,
+      },
       {
         jobId: shot.idempotency_key,
         // NOTE: BullMQ priority queue requires `enablePriorityQueue: true` on both
@@ -74,7 +87,7 @@ export class ShotIngestionQueue implements OnModuleInit, OnModuleDestroy {
         // SLA-tiered priority (real-time=1 vs batch=2) is deferred to a follow-up
         // once we add `enablePriorityQueue: true` to the BullModule and @Processor config.
         attempts: 5,
-        backoff: { type: 'exponential', delay: 1000 },
+        backoff: { type: "exponential", delay: 1000 },
         removeOnComplete: { age: 86400 },
         // Keep failed jobs for 7 days (vs 1 day for completed) so ops can inspect
         // permanently-failed shots without needing to restore from logs.
@@ -98,12 +111,13 @@ export class ShotIngestionQueue implements OnModuleInit, OnModuleDestroy {
    * Redis MULTI/EXEC, which is not worth the complexity for this use case.
    */
   async checkBatchCapacity(batchSize: number): Promise<void> {
-    const maxDepth = this.config.get('MAX_QUEUE_DEPTH', { infer: true }) ?? 10000;
+    const maxDepth =
+      this.config.get("MAX_QUEUE_DEPTH", { infer: true }) ?? 10000;
     const waiting = await this.queue.getWaitingCount();
 
     if (waiting + batchSize > maxDepth) {
       throw new ServiceUnavailableException({
-        error_code: 'SERVICE_UNAVAILABLE',
+        error_code: "SERVICE_UNAVAILABLE",
         message: `Queue is at capacity (depth ${waiting}, batch ${batchSize}, max ${maxDepth}). Retry after 30 seconds.`,
         retryAfter: 30,
       });

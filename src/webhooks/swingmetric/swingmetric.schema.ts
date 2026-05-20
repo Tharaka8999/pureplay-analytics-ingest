@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Normalise a raw SwingMetric shot object before validation so both wire formats
@@ -14,7 +14,7 @@ import { z } from 'zod';
  * the ?? short-circuits and leaves it unchanged.
  */
 function normaliseShot(raw: unknown): unknown {
-  if (typeof raw !== 'object' || raw === null) return raw;
+  if (typeof raw !== "object" || raw === null) return raw;
   const {
     club_used, // V1 → 'club'
     launch_angle, // V2 → 'launch_deg'
@@ -25,11 +25,11 @@ function normaliseShot(raw: unknown): unknown {
   } = raw as Record<string, unknown>;
   return {
     ...rest,
-    club: rest['club'] ?? club_used,
-    launch_deg: rest['launch_deg'] ?? launch_angle,
-    carry_yd: rest['carry_yd'] ?? carry_yds,
-    total_yd: rest['total_yd'] ?? total_yds,
-    offline_yd: rest['offline_yd'] ?? offline_yds,
+    club: rest["club"] ?? club_used,
+    launch_deg: rest["launch_deg"] ?? launch_angle,
+    carry_yd: rest["carry_yd"] ?? carry_yds,
+    total_yd: rest["total_yd"] ?? total_yds,
+    offline_yd: rest["offline_yd"] ?? offline_yds,
   };
 }
 

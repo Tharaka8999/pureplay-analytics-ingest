@@ -1,8 +1,12 @@
-import type { ClubCode } from './club-code';
+import type { ClubCode } from "./club-code";
 
-export type Vendor = 'trackpro' | 'swingmetric' | 'proswing';
+export type Vendor = "trackpro" | "swingmetric" | "proswing";
 
-export const VALID_VENDORS: readonly Vendor[] = ['trackpro', 'swingmetric', 'proswing'];
+export const VALID_VENDORS: readonly Vendor[] = [
+  "trackpro",
+  "swingmetric",
+  "proswing",
+];
 
 export interface NormalisedShot {
   canonical_shot_id: string;

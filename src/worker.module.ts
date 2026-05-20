@@ -1,14 +1,14 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { BullModule } from '@nestjs/bullmq';
-import { EventEmitterModule } from '@nestjs/event-emitter';
-import Redis from 'ioredis';
-import { validate, type Env } from './config/env.schema';
-import { KyselyModule } from './shared/kysely/kysely.module';
-import { RedisModule } from './shared/redis/redis.module';
-import { LoggerModule } from './shared/pino/logger.module';
-import { IngestionModule } from './ingestion/ingestion.module';
-import { OutboxPublisherService } from './ingestion/outbox-publisher.service';
+import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { BullModule } from "@nestjs/bullmq";
+import { EventEmitterModule } from "@nestjs/event-emitter";
+import Redis from "ioredis";
+import { validate, type Env } from "./config/env.schema";
+import { KyselyModule } from "./shared/kysely/kysely.module";
+import { RedisModule } from "./shared/redis/redis.module";
+import { LoggerModule } from "./shared/pino/logger.module";
+import { IngestionModule } from "./ingestion/ingestion.module";
+import { OutboxPublisherService } from "./ingestion/outbox-publisher.service";
 
 @Module({
   imports: [
@@ -16,7 +16,7 @@ import { OutboxPublisherService } from './ingestion/outbox-publisher.service';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env>) => ({
-        connection: new Redis(config.get('REDIS_URL', { infer: true })!, {
+        connection: new Redis(config.get("REDIS_URL", { infer: true })!, {
           maxRetriesPerRequest: null,
         }),
       }),

@@ -1,15 +1,21 @@
-import { InternalServerErrorException } from '@nestjs/common';
-import { monotonicFactory } from 'ulidx';
-import { mphToMps, kphToMps, mpsToMps, ftToM, ydToM } from '../../shared/domain/units';
-import { normaliseClub } from '../../shared/domain/club-code';
-import { computeContentHash } from '../../ingestion/content-hash';
-import type { NormalisedShot } from '../../shared/domain/shot';
-import type { ProswingCanonicalPayload } from './proswing.schema';
+import { InternalServerErrorException } from "@nestjs/common";
+import { monotonicFactory } from "ulidx";
+import {
+  mphToMps,
+  kphToMps,
+  mpsToMps,
+  ftToM,
+  ydToM,
+} from "../../shared/domain/units";
+import { normaliseClub } from "../../shared/domain/club-code";
+import { computeContentHash } from "../../ingestion/content-hash";
+import type { NormalisedShot } from "../../shared/domain/shot";
+import type { ProswingCanonicalPayload } from "./proswing.schema";
 // Re-export V1 schema for unit tests that validate it directly (parsers.spec.ts)
-export { ProswingPayloadSchema } from './proswing.schema';
+export { ProswingPayloadSchema } from "./proswing.schema";
 
 const ulid = monotonicFactory();
-const PARSER_VERSION = '1.0.0';
+const PARSER_VERSION = "1.0.0";
 
 /**
  * These defaults are unreachable in practice — the Zod schema enforces enum values
@@ -17,9 +23,12 @@ const PARSER_VERSION = '1.0.0';
  */
 function convertSpeed(value: number, unit: string): number {
   switch (unit) {
-    case 'mph': return mphToMps(value);
-    case 'kph': return kphToMps(value);
-    case 'mps': return mpsToMps(value);
+    case "mph":
+      return mphToMps(value);
+    case "kph":
+      return kphToMps(value);
+    case "mps":
+      return mpsToMps(value);
     default:
       // Schema mismatch: Zod enum should have caught this. This is a programmer error.
       throw new InternalServerErrorException(
@@ -30,9 +39,12 @@ function convertSpeed(value: number, unit: string): number {
 
 function convertDistance(value: number, unit: string): number {
   switch (unit) {
-    case 'yd': return ydToM(value);
-    case 'm':  return value;
-    case 'ft': return ftToM(value);
+    case "yd":
+      return ydToM(value);
+    case "m":
+      return value;
+    case "ft":
+      return ftToM(value);
     default:
       // Schema mismatch: Zod enum should have caught this. This is a programmer error.
       throw new InternalServerErrorException(
@@ -41,7 +53,10 @@ function convertDistance(value: number, unit: string): number {
   }
 }
 
-function parseTzOffset(occurred_at: string): { utc: string; offsetMin: number } {
+function parseTzOffset(occurred_at: string): {
+  utc: string;
+  offsetMin: number;
+} {
   // Parse ISO-8601 with optional timezone offset, e.g. "2024-03-15T20:30:00+10:00"
   const tzMatch = occurred_at.match(/([+-])(\d{2}):(\d{2})$/);
 
@@ -50,7 +65,7 @@ function parseTzOffset(occurred_at: string): { utc: string; offsetMin: number } 
     return { utc: new Date(occurred_at).toISOString(), offsetMin: 0 };
   }
 
-  const sign = tzMatch[1] === '+' ? 1 : -1;
+  const sign = tzMatch[1] === "+" ? 1 : -1;
   const hours = parseInt(String(tzMatch[2]), 10);
   const minutes = parseInt(String(tzMatch[3]), 10);
   const offsetMin = sign * (hours * 60 + minutes);
@@ -72,7 +87,10 @@ export function parseProswing(
 
   const { utc: capturedAtUtc, offsetMin } = parseTzOffset(shot.occurred_at);
   const clubCode = normaliseClub(shot.club_code);
-  const ballSpeedMps = convertSpeed(shot.ball_speed.value, shot.ball_speed.unit);
+  const ballSpeedMps = convertSpeed(
+    shot.ball_speed.value,
+    shot.ball_speed.unit,
+  );
   const carryM = convertDistance(shot.carry.value, shot.carry.unit);
   const lateralM = convertDistance(shot.deviation.value, shot.deviation.unit);
   const totalM = shot.total
@@ -84,9 +102,9 @@ export function parseProswing(
 
   const normalisedShot: NormalisedShot = {
     canonical_shot_id: ulid(),
-    vendor: 'proswing',
+    vendor: "proswing",
     vendor_shot_id: shot.id,
-    idempotency_key: `ps|${shot.id}`,
+    idempotency_key: `ps|${user_token}|${shot.id}`,
     vendor_user_id: user_token,
     canonical_user_id: null,
     captured_at_utc: capturedAtUtc,

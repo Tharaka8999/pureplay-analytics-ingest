@@ -46,42 +46,44 @@ TrackPro sends a single shot per request with flat SI units.
 
 ```json
 {
-  "shot_uid": "TP-20240315-abc123",
-  "user_id": "tp_user_456",
+  "shot_uid": "tp-2024-03-15-abc1def2",
+  "user_external_id": "tp_user_456",
   "device_id": "device_789",
   "session_id": "session_001",
-  "timestamp_utc": "2024-03-15T10:30:00Z",
+  "captured_at": "2024-03-15T10:30:00Z",
   "club": "7I",
   "ball_speed_mps": 55.2,
-  "club_speed_mps": 40.1,
+  "club_head_speed_mps": 40.1,
   "launch_angle_deg": 18.5,
-  "carry_m": 148.3,
-  "total_m": 161.0,
-  "lateral_m": -2.1
+  "carry_distance_m": 148.3,
+  "total_distance_m": 161.0,
+  "side_deviation_m": -2.1,
+  "spin_rpm": 6800
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `shot_uid` | string | Yes | Vendor's unique shot identifier |
-| `user_id` | string | Yes | Vendor user identifier |
+| `shot_uid` | string | Yes | Format: `tp-YYYY-MM-DD-{8 hex chars}` |
+| `user_external_id` | string | Yes | Vendor user identifier |
 | `device_id` | string | No | Hardware device identifier |
 | `session_id` | string | No | Session grouping identifier |
-| `timestamp_utc` | ISO-8601 string | Yes | Captured time in UTC |
+| `captured_at` | ISO-8601 string | Yes | Captured time; UTC or with offset |
 | `club` | string | Yes | Raw club string (normalised by parser) |
-| `ball_speed_mps` | number | Yes | Must be > 0 |
-| `club_speed_mps` | number | No | Nullable |
-| `launch_angle_deg` | number | Yes | |
-| `carry_m` | number | Yes | |
-| `total_m` | number | No | Nullable |
-| `lateral_m` | number | Yes | Signed: negative = left, positive = right |
+| `ball_speed_mps` | number | Yes | `0–120 m/s` |
+| `club_head_speed_mps` | number | No | Nullable |
+| `launch_angle_deg` | number | Yes | `-10–70°` |
+| `carry_distance_m` | number | Yes | `0–450 m` |
+| `total_distance_m` | number | No | Nullable |
+| `side_deviation_m` | number | Yes | Signed: negative = left, positive = right |
+| `spin_rpm` | integer | No | `0–15 000 rpm` |
 
 ### Success response — 202
 
 ```json
 {
-  "canonical_shot_id": "01HQ2RJ3P5KV9XNCT8MZBY4YDF",
-  "accepted": true
+  "status": "accepted",
+  "correlation_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -110,20 +112,22 @@ The 1-second bucket means two identical SwingMetric shots within the same second
 
 ```json
 {
+  "session_id": "sm_session_001",
   "player": {
     "id": "sm_player_789",
     "email": "player@example.com"
   },
-  "device_id": "sm_device_001",
+  "device": "sm_device_001",
   "shots": [
     {
-      "id": "shot-uuid-001",
-      "timestamp_ms": 1710494400000,
+      "ts_ms": 1710494400000,
       "club": "7I",
-      "ball_speed_mps": 54.8,
-      "launch_angle_deg": 19.2,
-      "carry_m": 145.6,
-      "lateral_m": 1.4,
+      "ball_speed_mph": 122.6,
+      "swing_speed_mph": 89.7,
+      "launch_deg": 19.2,
+      "carry_yd": 159.3,
+      "total_yd": 174.0,
+      "offline_yd": 1.5,
       "spin_rpm": 6800
     }
   ]
@@ -143,12 +147,10 @@ The 1-second bucket means two identical SwingMetric shots within the same second
 
 ```json
 {
-  "accepted": 3,
-  "rejected": []
+  "status": "accepted",
+  "correlation_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
-
-If individual shots in the batch fail validation, they appear in `rejected` with their index and error detail. The rest are accepted.
 
 ### Batch capacity
 
@@ -176,25 +178,25 @@ V1: payload has nested { value, unit } objects for each measurement
 
 ```json
 {
+  "type": "shot.recorded",
   "data": {
     "player": {
-      "user_token": "ps_user_abc",
-      "email": "player@example.com"
+      "id": "ps_user_abc"
     },
     "device": {
-      "id": "ps_device_xyz",
-      "session_id": "ps_session_001"
+      "id": "ps_device_xyz"
     },
     "shot": {
       "id": "ps-shot-12345",
-      "captured_at": "2024-03-15T20:30:00+10:00",
-      "club": "pitching wedge",
+      "occurred_at": "2024-03-15T20:30:00+10:00",
+      "club_code": "pitching wedge",
       "ball_speed": { "value": 120.5, "unit": "mph" },
-      "club_head_speed": { "value": 92.3, "unit": "mph" },
-      "launch_angle": { "value": 24.1, "unit": "deg" },
+      "club_speed": { "value": 92.3, "unit": "mph" },
+      "launch_angle": 24.1,
       "carry": { "value": 138.2, "unit": "yd" },
-      "offline": { "value": -1.5, "unit": "yd" },
-      "spin": { "value": 8200, "unit": "rpm" }
+      "total": { "value": 151.0, "unit": "yd" },
+      "deviation": { "value": -1.5, "unit": "yd" },
+      "spin_rpm": 8200
     }
   }
 }
@@ -212,7 +214,7 @@ ProSwing can send measurements in multiple units. The parser converts all values
 | Launch angle | `deg` | As-is |
 | Spin | `rpm` | As-is |
 
-**Unit-mistag guard:** if `unit === 'mps'` and `value > 120`, the payload is rejected with 400 (`error_code: UNIT_MISTAG_DETECTED`). A ball speed of 120 m/s is physically impossible — this signals the vendor sent mph or kph but labelled it as mps.
+**Unit-mistag guard:** if `unit === 'mps'` and `value > 120`, the payload is rejected with 400 (`error_code: PAYLOAD_VALIDATION_FAILED`). A ball speed of 120 m/s is physically impossible — this signals the vendor sent mph or kph but labelled it as mps.
 
 ### Timezone handling
 
@@ -228,4 +230,4 @@ The worker rejects shots where `captured_at_utc` is:
 - More than **24 hours in the past** (retransmission lag exceeded)
 - More than **5 minutes in the future** (NTP drift tolerance)
 
-Rejected shots are written to `ingestion_failures` with `error_code: CLOCK_SKEW_EXCESSIVE`.
+Rejected shots are written to `ingestion_failures` with `error_code: CLOCK_SKEW_EXCESSIVE` and `http_status: 0` (the sentinel value for worker-originated failures — there is no HTTP response at that point).

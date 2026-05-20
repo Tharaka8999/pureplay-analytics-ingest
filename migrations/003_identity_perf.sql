@@ -35,6 +35,6 @@ CREATE INDEX IF NOT EXISTS shots_vendor_user_id_unlinked
 -- for all equality lookups on canonical_user_id.
 -- ──────────────────────────────────────────────────────────────
 
-DROP INDEX IF EXISTS user_identities_canonical_user_id;
-CREATE INDEX IF NOT EXISTS user_identities_canonical_user_id_created
+DROP INDEX CONCURRENTLY IF EXISTS user_identities_canonical_user_id;
+CREATE INDEX CONCURRENTLY IF NOT EXISTS user_identities_canonical_user_id_created
   ON user_identities (canonical_user_id, created_at ASC);

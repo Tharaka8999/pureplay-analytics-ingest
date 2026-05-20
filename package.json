@@ -11,6 +11,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "lint": "eslint \"{src,test}/**/*.ts\"",
+    "lint:fix": "eslint \"{src,test}/**/*.ts\" --fix",
     "start:api": "node -r ./dist/shared/otel/otel.js dist/main.api.js",
     "start:worker": "node -r ./dist/shared/otel/otel.js dist/main.worker.js",
     "start:dev": "ts-node -r tsconfig-paths/register src/main.api.ts",
@@ -18,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "db:migrate": "ts-node -r tsconfig-paths/register -e \"require('./src/shared/kysely/migration-runner').runMigrations()\""
+    "db:migrate": "ts-node -r tsconfig-paths/register -e \"const {Kysely,PostgresDialect}=require('kysely');const {Pool}=require('pg');const {runMigrations}=require('./src/shared/kysely/migration-runner');const db=new Kysely({dialect:new PostgresDialect({pool:new Pool({connectionString:process.env.DATABASE_URL})})});runMigrations(db).then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\""
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
@@ -71,6 +72,11 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "unplugin-swc": "^1.5.1",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "typescript-eslint": "^8.18.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0"
   }
 }

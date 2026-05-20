@@ -20,10 +20,7 @@ import { WebhookAuthGuard, Vendor } from "../../shared/auth/webhook-auth.guard";
 import { ZodValidationPipe } from "../../shared/zod-validation.pipe";
 import { ShotIngestionQueue } from "../../ingestion/shot-ingestion.queue";
 import { hasExcessiveClockSkew } from "../../ingestion/shot-repository";
-import {
-  TrackproPayloadSchema,
-  type TrackproPayload,
-} from "./trackpro.schema";
+import { TrackproPayloadSchema, type TrackproPayload } from "./trackpro.schema";
 import { parseTrackpro } from "./trackpro.parser";
 
 @ApiTags("webhooks")
@@ -78,11 +75,13 @@ export class TrackproController {
   })
   @ApiResponse({
     status: 422,
-    description: "Shot rejected — captured_at is more than 24h in the past or 5min in the future",
+    description:
+      "Shot rejected — captured_at is more than 24h in the past or 5min in the future",
     schema: {
       example: {
         error_code: "CLOCK_SKEW_EXCESSIVE",
-        message: "captured_at is outside the allowed ingestion window (max 24h past, 5min future).",
+        message:
+          "captured_at is outside the allowed ingestion window (max 24h past, 5min future).",
         correlation_id: "uuid",
       },
     },
@@ -106,8 +105,9 @@ export class TrackproController {
 
     if (hasExcessiveClockSkew(shot!.captured_at_utc, receivedAtUtc)) {
       throw new UnprocessableEntityException({
-        error_code: 'CLOCK_SKEW_EXCESSIVE',
-        message: 'captured_at is outside the allowed ingestion window (max 24h past, 5min future).',
+        error_code: "CLOCK_SKEW_EXCESSIVE",
+        message:
+          "captured_at is outside the allowed ingestion window (max 24h past, 5min future).",
       });
     }
 

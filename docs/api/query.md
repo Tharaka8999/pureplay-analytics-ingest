@@ -19,12 +19,12 @@ Returns shots for a canonical user, newest first. Excludes near-duplicates (`dup
 
 | Param | Type | Default | Notes |
 |---|---|---|---|
-| `limit` | integer | 20 | Max 100 |
+| `limit` | integer | 50 | Max 100 |
 | `cursor` | string | — | Opaque keyset cursor from previous response |
 | `since` | ISO-8601 | — | Filter `captured_at_utc >= since` |
 | `until` | ISO-8601 | — | Filter `captured_at_utc <= until` |
 | `club` | string | — | Filter by club code (e.g. `7I`) |
-| `include_duplicates` | boolean | false | Include near-duplicates in results |
+| `include_near_duplicates` | boolean | false | Include near-duplicate shots in results |
 
 **Example request:**
 
@@ -57,14 +57,23 @@ Authorization: Bearer <INTERNAL_API_KEY>
       "duplicate_of": null
     }
   ],
-  "cursor": "eyJjYXB0dXJlZF9hdF91dGMiOiIyMDI0LTAzLTE1VDEwOjMwOjAwLjAwMFoiLCJjYW5vbmljYWxfc2hvdF9pZCI6IjAxSFEyUkozUDVLVjlYTkNUOE1aQlk0WURGJ30",
-  "has_more": false
+  "paging": {
+    "next_cursor": "eyJjYXB0dXJlZF9hdF91dGMiOiIyMDI0LTAzLTE1VDEwOjMwOjAwLjAwMFoiLCJjYW5vbmljYWxfc2hvdF9pZCI6IjAxSFEyUkozUDVLVjlYTkNUOE1aQlk0WURGJ30",
+    "has_more": false,
+    "limit": 50
+  },
+  "meta": {
+    "since": "2024-02-14T10:00:00.000Z",
+    "until": "2024-03-15T10:00:00.000Z",
+    "club": null,
+    "include_near_duplicates": false
+  }
 }
 ```
 
 **Note:** `raw_payload` is never included in API responses.
 
-**Pagination:** Keyset cursor encoding `(captured_at_utc, canonical_shot_id)`. Pass the returned `cursor` as the `cursor` query param in the next request.
+**Pagination:** Keyset cursor encoding `(captured_at_utc, canonical_shot_id)`. Pass `paging.next_cursor` as the `cursor` query param in the next request when `paging.has_more` is `true`.
 
 ---
 
@@ -105,7 +114,8 @@ Returns per-club aggregated statistics for a canonical user over a time window.
   },
   "club": null,
   "totals": {
-    "shot_count": 247
+    "shot_count": 247,
+    "capped": false
   },
   "by_club": [
     {
@@ -275,9 +285,8 @@ All errors use RFC 9457 Problem Details:
 
 | Status | `error_code` | Cause |
 |---|---|---|
-| 400 | `PAYLOAD_VALIDATION_FAILED` | Zod schema failure |
+| 400 | `PAYLOAD_VALIDATION_FAILED` | Zod schema failure (includes ProSwing unit-mistag) |
 | 400 | `INVALID_DATE` | Non-parseable date in query param |
-| 400 | `UNIT_MISTAG_DETECTED` | ProSwing `mps` value > 120 |
 | 401 | `UNAUTHORIZED` | Auth guard rejection |
 | 404 | `IDENTITY_NOT_FOUND` | Unlink target does not exist |
 | 422 | `CLOCK_SKEW_EXCESSIVE` | Shot timestamp > 24h past or > 5min future |

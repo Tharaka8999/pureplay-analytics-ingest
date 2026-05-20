@@ -1,7 +1,7 @@
-import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
-import { Logger } from 'nestjs-pino';
-import { WorkerModule } from './worker.module';
+import "reflect-metadata";
+import { NestFactory } from "@nestjs/core";
+import { Logger } from "nestjs-pino";
+import { WorkerModule } from "./worker.module";
 
 async function bootstrapWorker(): Promise<void> {
   const app = await NestFactory.createApplicationContext(WorkerModule, {
@@ -12,7 +12,7 @@ async function bootstrapWorker(): Promise<void> {
   app.enableShutdownHooks();
 
   const logger = app.get(Logger);
-  logger.log('Worker started', 'Bootstrap');
+  logger.log("Worker started", "Bootstrap");
 }
 
 void bootstrapWorker();

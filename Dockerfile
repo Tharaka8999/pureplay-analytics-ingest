@@ -48,7 +48,7 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD wget -qO- http://127.0.0.1:${PORT:-3000}/healthz || exit 1
 
 EXPOSE 3000
-CMD ["node", "dist/main.api.js"]
+CMD ["node", "-r", "./dist/shared/otel/otel.js", "./dist/main.api.js"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 3b: Worker process
@@ -68,4 +68,4 @@ USER appuser
 
 ENV NODE_OPTIONS="--max-old-space-size=384"
 
-CMD ["node", "dist/main.worker.js"]
+CMD ["node", "-r", "./dist/shared/otel/otel.js", "./dist/main.worker.js"]

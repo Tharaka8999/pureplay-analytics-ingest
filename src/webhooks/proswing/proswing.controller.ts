@@ -76,7 +76,8 @@ export class ProswingController {
     schema: {
       example: {
         error_code: "CLOCK_SKEW_EXCESSIVE",
-        message: "captured_at is outside the allowed ingestion window (max 24h past, 5min future).",
+        message:
+          "captured_at is outside the allowed ingestion window (max 24h past, 5min future).",
         correlation_id: "uuid",
       },
     },
@@ -96,8 +97,9 @@ export class ProswingController {
 
     if (hasExcessiveClockSkew(shot!.captured_at_utc, receivedAtUtc)) {
       throw new UnprocessableEntityException({
-        error_code: 'CLOCK_SKEW_EXCESSIVE',
-        message: 'captured_at is outside the allowed ingestion window (max 24h past, 5min future).',
+        error_code: "CLOCK_SKEW_EXCESSIVE",
+        message:
+          "captured_at is outside the allowed ingestion window (max 24h past, 5min future).",
       });
     }
 

@@ -1,10 +1,19 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger, Inject } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { type Kysely } from 'kysely';
-import type { Database } from '../shared/kysely/types';
-import { KYSELY } from '../shared/kysely/kysely.module';
-import { SHOT_PERSISTED_EVENT, ShotPersistedEvent } from './events/shot-persisted.event';
-import type { NormalisedShot } from '../shared/domain/shot';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+  Inject,
+} from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { type Kysely } from "kysely";
+import type { Database } from "../shared/kysely/types";
+import { KYSELY } from "../shared/kysely/kysely.module";
+import {
+  SHOT_PERSISTED_EVENT,
+  ShotPersistedEvent,
+} from "./events/shot-persisted.event";
+import type { NormalisedShot } from "../shared/domain/shot";
 
 // Poll the outbox table every 5 seconds.
 const POLL_INTERVAL_MS = 5_000;
@@ -40,7 +49,10 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
     void this.publishPending();
     this.pollInterval = setInterval(() => {
       this.publishPending().catch((err: unknown) => {
-        this.logger.error({ err }, 'Outbox publish cycle failed — will retry next interval');
+        this.logger.error(
+          { err },
+          "Outbox publish cycle failed — will retry next interval",
+        );
       });
     }, POLL_INTERVAL_MS);
   }
@@ -50,41 +62,65 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Fetch up to BATCH_SIZE pending outbox events, emit each, then delete it.
-   * Each row is deleted individually so a single emit failure does not block
-   * later rows in the same batch.
+   * Fetch up to BATCH_SIZE pending outbox events, emit each, then delete them.
+   *
+   * Runs inside a transaction so FOR UPDATE SKIP LOCKED holds row-level locks
+   * across the entire batch — two worker replicas each claim a disjoint set of
+   * rows and never process the same event. Without a transaction, auto-commit
+   * mode releases the lock immediately after SELECT, making SKIP LOCKED useless.
+   *
+   * Rows that emit successfully are bulk-deleted at commit time. Rows that fail
+   * to emit are left in the table and retried on the next poll cycle.
    */
   async publishPending(): Promise<void> {
-    const rows = await this.db
-      .selectFrom('outbox_events')
-      .selectAll()
-      .orderBy('created_at', 'asc')
-      .limit(BATCH_SIZE)
-      .execute();
+    await this.db.transaction().execute(async (trx) => {
+      const rows = await trx
+        .selectFrom("outbox_events")
+        .selectAll()
+        .orderBy("created_at", "asc")
+        .limit(BATCH_SIZE)
+        .forUpdate()
+        .skipLocked()
+        .execute();
 
-    if (rows.length === 0) return;
+      if (rows.length === 0) return;
 
-    this.logger.debug(`Outbox: publishing ${rows.length} pending event(s)`);
+      this.logger.debug(`Outbox: publishing ${rows.length} pending event(s)`);
 
-    for (const row of rows) {
-      try {
-        if (row.event_type === 'shot.persisted') {
-          // The outbox payload was written without raw_payload (PII exclusion).
-          // Listeners that need raw_payload must fetch the shot from DB by canonical_shot_id.
-          const shot = { ...row.payload, raw_payload: {} } as NormalisedShot;
-          this.eventEmitter.emit(SHOT_PERSISTED_EVENT, new ShotPersistedEvent(shot));
-        } else {
-          this.logger.warn({ event_type: row.event_type, outbox_id: row.id }, 'Unknown outbox event type — skipping');
+      const successfulIds: number[] = [];
+
+      for (const row of rows) {
+        try {
+          if (row.event_type === "shot.persisted") {
+            // The outbox payload was written without raw_payload (PII exclusion).
+            // Listeners that need raw_payload must fetch the shot from DB by canonical_shot_id.
+            const shot = { ...row.payload, raw_payload: {} } as NormalisedShot;
+            this.eventEmitter.emit(
+              SHOT_PERSISTED_EVENT,
+              new ShotPersistedEvent(shot),
+            );
+          } else {
+            this.logger.warn(
+              { event_type: row.event_type, outbox_id: row.id },
+              "Unknown outbox event type — skipping",
+            );
+          }
+          successfulIds.push(row.id);
+        } catch (err: unknown) {
+          this.logger.error(
+            { err, outbox_id: row.id, event_type: row.event_type },
+            "Failed to publish outbox event — row retained for next cycle",
+          );
+          // Do not rethrow — continue processing remaining rows in the batch.
         }
-
-        await this.db.deleteFrom('outbox_events').where('id', '=', row.id).execute();
-      } catch (err: unknown) {
-        this.logger.error(
-          { err, outbox_id: row.id, event_type: row.event_type },
-          'Failed to publish outbox event — row retained for next cycle',
-        );
-        // Do not rethrow — continue processing remaining rows in the batch.
       }
-    }
+
+      if (successfulIds.length > 0) {
+        await trx
+          .deleteFrom("outbox_events")
+          .where("id", "in", successfulIds)
+          .execute();
+      }
+    });
   }
 }

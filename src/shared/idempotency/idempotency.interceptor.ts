@@ -5,20 +5,24 @@ import {
   CallHandler,
   Inject,
   Logger,
-  HttpException,
-} from '@nestjs/common';
-import { Observable, of } from 'rxjs';
-import { tap } from 'rxjs/operators';
-import type { FastifyRequest, FastifyReply } from 'fastify';
-import Redis from 'ioredis';
-import { REDIS } from '../redis/redis.module';
+  BadRequestException,
+} from "@nestjs/common";
+import { Observable } from "rxjs";
+import { tap } from "rxjs/operators";
+import type { FastifyRequest, FastifyReply } from "fastify";
+import Redis from "ioredis";
+import { REDIS } from "../redis/redis.module";
 
 // Cache identity-link responses for 24 hours.
 // RFC 9562 / draft-ietf-httpapi-idempotency-key-header specifies no minimum TTL;
 // 24h is a widely-adopted default for webhook-style idempotency windows.
 const IDEMPOTENCY_CACHE_TTL_S = 86_400;
 
-const IDEMPOTENCY_KEY_HEADER = 'idempotency-key';
+const IDEMPOTENCY_KEY_HEADER = "idempotency-key";
+
+// Max length for the Idempotency-Key header value. Longer values are rejected
+// with 400 to prevent unbounded Redis key sizes under adversarial input.
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 interface CachedResponse {
   status: number;
@@ -47,9 +51,7 @@ function buildCacheKey(key: string, path: string): string {
 export class IdempotencyInterceptor implements NestInterceptor {
   private readonly logger = new Logger(IdempotencyInterceptor.name);
 
-  constructor(
-    @Inject(REDIS) private readonly redis: Redis,
-  ) {}
+  constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const http = context.switchToHttp();
@@ -64,12 +66,22 @@ export class IdempotencyInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const cacheKey = buildCacheKey(idempotencyKey, request.url);
+    if (idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+      throw new BadRequestException(
+        `Idempotency-Key must not exceed ${MAX_IDEMPOTENCY_KEY_LENGTH} characters.`,
+      );
+    }
+
+    // Use only the pathname (not query string) so the same key on the same
+    // endpoint always hits the same cache entry regardless of query params.
+    const pathname = new URL(request.url, "http://x").pathname;
+    const cacheKey = buildCacheKey(idempotencyKey, pathname);
 
     // Return an Observable that asynchronously checks Redis, then either replays
     // the cached response or delegates to the handler and caches the result.
     return new Observable((subscriber) => {
-      this.redis.get(cacheKey)
+      this.redis
+        .get(cacheKey)
         .then((cached) => {
           if (cached !== null) {
             // Cache hit — replay the stored response
@@ -77,7 +89,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
             try {
               parsed = JSON.parse(cached) as CachedResponse;
             } catch {
-              this.logger.warn({ cacheKey }, 'Idempotency cache entry is malformed — treating as miss');
+              this.logger.warn(
+                { cacheKey },
+                "Idempotency cache entry is malformed — treating as miss",
+              );
               return this.executeAndCache(cacheKey, next, reply, subscriber);
             }
 
@@ -92,7 +107,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
         })
         .catch((err: unknown) => {
           // Redis unavailable — degrade gracefully; let the request through uncached
-          this.logger.warn({ err, cacheKey }, 'Idempotency Redis lookup failed — degrading to pass-through');
+          this.logger.warn(
+            { err, cacheKey },
+            "Idempotency Redis lookup failed — degrading to pass-through",
+          );
           next.handle().subscribe(subscriber);
         });
     });
@@ -105,18 +123,28 @@ export class IdempotencyInterceptor implements NestInterceptor {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     subscriber: any,
   ): void {
-    next.handle()
+    next
+      .handle()
       .pipe(
         tap({
           next: (body: unknown) => {
             // Cache only successful (2xx) responses
-            const status: number = (reply as { statusCode?: number }).statusCode ?? 200;
+            const status: number =
+              (reply as { statusCode?: number }).statusCode ?? 200;
             if (status >= 200 && status < 300) {
               const entry: CachedResponse = { status, body };
               this.redis
-                .set(cacheKey, JSON.stringify(entry), 'EX', IDEMPOTENCY_CACHE_TTL_S)
+                .set(
+                  cacheKey,
+                  JSON.stringify(entry),
+                  "EX",
+                  IDEMPOTENCY_CACHE_TTL_S,
+                )
                 .catch((err: unknown) => {
-                  this.logger.warn({ err, cacheKey }, 'Failed to write idempotency cache — response not cached');
+                  this.logger.warn(
+                    { err, cacheKey },
+                    "Failed to write idempotency cache — response not cached",
+                  );
                 });
             }
           },

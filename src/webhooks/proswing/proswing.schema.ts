@@ -1,10 +1,10 @@
-import { z } from 'zod';
+import { z } from "zod";
 import {
   PipeTransform,
   ArgumentMetadata,
   BadRequestException,
-} from '@nestjs/common';
-import { ZodError } from 'zod';
+} from "@nestjs/common";
+import { ZodError } from "zod";
 
 // ─── Shared measurement sub-schemas ──────────────────────────────────────────
 
@@ -17,13 +17,13 @@ import { ZodError } from 'zod';
 export const ProswingBallSpeedSchema = z
   .object({
     value: z.number().min(0).max(500),
-    unit: z.enum(['mph', 'kph', 'mps']),
+    unit: z.enum(["mph", "kph", "mps"]),
   })
   .strict()
   .superRefine((data, ctx) => {
-    if (data.unit === 'mps' && data.value > 120) {
+    if (data.unit === "mps" && data.value > 120) {
       ctx.addIssue({
-        code: 'custom',
+        code: "custom",
         message: `ball_speed in mps cannot exceed 120 (unit-mistag detected); got ${data.value}`,
       });
     }
@@ -36,7 +36,7 @@ export const ProswingBallSpeedSchema = z
 export const ProswingClubSpeedSchema = z
   .object({
     value: z.number().min(0).max(300),
-    unit: z.enum(['mph', 'kph', 'mps']),
+    unit: z.enum(["mph", "kph", "mps"]),
   })
   .strict();
 
@@ -47,7 +47,7 @@ export const ProswingClubSpeedSchema = z
 export const ProswingDistanceSchema = z
   .object({
     value: z.number().min(-500).max(700),
-    unit: z.enum(['yd', 'm', 'ft']),
+    unit: z.enum(["yd", "m", "ft"]),
   })
   .strict();
 
@@ -55,7 +55,7 @@ export const ProswingDistanceSchema = z
 
 export const ProswingPayloadSchema = z
   .object({
-    type: z.literal('shot.recorded'),
+    type: z.literal("shot.recorded"),
     data: z
       .object({
         user_token: z.string().min(8).max(255),
@@ -68,7 +68,10 @@ export const ProswingPayloadSchema = z
             ball_speed: ProswingBallSpeedSchema,
             club_speed: ProswingClubSpeedSchema.optional(),
             launch: z
-              .object({ value: z.number().min(-10).max(90), unit: z.literal('deg') })
+              .object({
+                value: z.number().min(-10).max(90),
+                unit: z.literal("deg"),
+              })
               .strict(),
             carry: ProswingDistanceSchema,
             total: ProswingDistanceSchema.optional(),
@@ -114,32 +117,42 @@ const ProswingShotV2Schema = z
   })
   .strict()
   .superRefine((d, ctx) => {
-    if (d.ball_speed_mph == null && d.ball_speed_kph == null && d.ball_speed_mps == null) {
+    if (
+      d.ball_speed_mph == null &&
+      d.ball_speed_kph == null &&
+      d.ball_speed_mps == null
+    ) {
       ctx.addIssue({
-        code: 'custom',
-        path: ['ball_speed'],
-        message: 'One of ball_speed_mph, ball_speed_kph, or ball_speed_mps is required',
+        code: "custom",
+        path: ["ball_speed"],
+        message:
+          "One of ball_speed_mph, ball_speed_kph, or ball_speed_mps is required",
       });
     }
     if (d.carry_yd == null && d.carry_m == null) {
       ctx.addIssue({
-        code: 'custom',
-        path: ['carry'],
-        message: 'One of carry_yd or carry_m is required',
+        code: "custom",
+        path: ["carry"],
+        message: "One of carry_yd or carry_m is required",
       });
     }
-    if (d.deviation_yd == null && d.deviation_m == null && d.deviation_ft == null) {
+    if (
+      d.deviation_yd == null &&
+      d.deviation_m == null &&
+      d.deviation_ft == null
+    ) {
       ctx.addIssue({
-        code: 'custom',
-        path: ['deviation'],
-        message: 'One of deviation_yd, deviation_m, or deviation_ft is required',
+        code: "custom",
+        path: ["deviation"],
+        message:
+          "One of deviation_yd, deviation_m, or deviation_ft is required",
       });
     }
   });
 
 const ProswingPayloadV2Schema = z
   .object({
-    type: z.literal('shot.recorded'),
+    type: z.literal("shot.recorded"),
     data: z
       .object({
         user_token: z.string().min(8).max(255),
@@ -174,11 +187,14 @@ const ProswingShotV3Schema = z
 
 const ProswingPayloadV3Schema = z
   .object({
-    type: z.literal('shot.recorded'),
+    type: z.literal("shot.recorded"),
     data: z
       .object({
         player: z.object({ id: z.string().min(1).max(255) }).strict(),
-        device: z.object({ id: z.string().min(1).max(255) }).strict().optional(),
+        device: z
+          .object({ id: z.string().min(1).max(255) })
+          .strict()
+          .optional(),
         shot: ProswingShotV3Schema,
       })
       .strict(),
@@ -191,18 +207,18 @@ export interface ProswingCanonicalShot {
   id: string;
   occurred_at: string;
   club_code: string;
-  ball_speed: { value: number; unit: 'mph' | 'kph' | 'mps' };
-  club_speed?: { value: number; unit: 'mph' | 'kph' | 'mps' };
-  launch: { value: number; unit: 'deg' };
-  carry: { value: number; unit: 'yd' | 'm' | 'ft' };
-  total?: { value: number; unit: 'yd' | 'm' | 'ft' };
-  deviation: { value: number; unit: 'yd' | 'm' | 'ft' };
+  ball_speed: { value: number; unit: "mph" | "kph" | "mps" };
+  club_speed?: { value: number; unit: "mph" | "kph" | "mps" };
+  launch: { value: number; unit: "deg" };
+  carry: { value: number; unit: "yd" | "m" | "ft" };
+  total?: { value: number; unit: "yd" | "m" | "ft" };
+  deviation: { value: number; unit: "yd" | "m" | "ft" };
   /** V3 provides spin_rpm; V1/V2 leave this absent (parser defaults to null). */
   spin_rpm?: number;
 }
 
 export interface ProswingCanonicalPayload {
-  type: 'shot.recorded';
+  type: "shot.recorded";
   data: {
     /** Vendor-scoped user identifier. Derived from player.id in V3. */
     user_token: string;
@@ -220,22 +236,23 @@ export interface ProswingCanonicalPayload {
  *   V2: data.shot has a flat ball_speed_mph / ball_speed_kph / ball_speed_mps field
  *   V1: default               (nested {value, unit} measurement objects)
  */
-function detectVersion(raw: unknown): 'v1' | 'v2' | 'v3' {
-  if (typeof raw !== 'object' || raw === null) return 'v1';
-  const data = (raw as Record<string, unknown>)['data'];
-  if (typeof data !== 'object' || data === null) return 'v1';
+function detectVersion(raw: unknown): "v1" | "v2" | "v3" {
+  if (typeof raw !== "object" || raw === null) return "v1";
+  const data = (raw as Record<string, unknown>)["data"];
+  if (typeof data !== "object" || data === null) return "v1";
 
   // V3 marker: player object instead of user_token
-  if ('player' in data) return 'v3';
+  if ("player" in data) return "v3";
 
   // V2 marker: flat scalar ball_speed fields in the shot
-  const shot = (data as Record<string, unknown>)['shot'];
-  if (typeof shot === 'object' && shot !== null) {
+  const shot = (data as Record<string, unknown>)["shot"];
+  if (typeof shot === "object" && shot !== null) {
     const s = shot as Record<string, unknown>;
-    if ('ball_speed_mph' in s || 'ball_speed_kph' in s || 'ball_speed_mps' in s) return 'v2';
+    if ("ball_speed_mph" in s || "ball_speed_kph" in s || "ball_speed_mps" in s)
+      return "v2";
   }
 
-  return 'v1';
+  return "v1";
 }
 
 // ─── V2 / V3 → canonical conversion ──────────────────────────────────────────
@@ -255,42 +272,45 @@ function fromV2(p: PayloadV2): ProswingCanonicalPayload {
   const s = p.data.shot;
 
   // Resolve ball speed — first populated variant wins (mph > kph > mps)
-  let ballSpeed: ProswingCanonicalShot['ball_speed'];
+  let ballSpeed: ProswingCanonicalShot["ball_speed"];
   if (s.ball_speed_mph != null) {
-    ballSpeed = { value: s.ball_speed_mph, unit: 'mph' };
+    ballSpeed = { value: s.ball_speed_mph, unit: "mph" };
   } else if (s.ball_speed_kph != null) {
-    ballSpeed = { value: s.ball_speed_kph, unit: 'kph' };
+    ballSpeed = { value: s.ball_speed_kph, unit: "kph" };
   } else {
-    ballSpeed = { value: s.ball_speed_mps!, unit: 'mps' };
+    ballSpeed = { value: s.ball_speed_mps!, unit: "mps" };
   }
 
   // Resolve optional club speed
-  let clubSpeed: ProswingCanonicalShot['club_speed'];
+  let clubSpeed: ProswingCanonicalShot["club_speed"];
   if (s.club_speed_mph != null) {
-    clubSpeed = { value: s.club_speed_mph, unit: 'mph' };
+    clubSpeed = { value: s.club_speed_mph, unit: "mph" };
   } else if (s.club_speed_kph != null) {
-    clubSpeed = { value: s.club_speed_kph, unit: 'kph' };
+    clubSpeed = { value: s.club_speed_kph, unit: "kph" };
   } else if (s.club_speed_mps != null) {
-    clubSpeed = { value: s.club_speed_mps, unit: 'mps' };
+    clubSpeed = { value: s.club_speed_mps, unit: "mps" };
   }
 
   // Resolve carry — yd takes precedence
-  const carry: ProswingCanonicalShot['carry'] =
-    s.carry_yd != null ? { value: s.carry_yd, unit: 'yd' } : { value: s.carry_m!, unit: 'm' };
+  const carry: ProswingCanonicalShot["carry"] =
+    s.carry_yd != null
+      ? { value: s.carry_yd, unit: "yd" }
+      : { value: s.carry_m!, unit: "m" };
 
   // Resolve optional total
-  let total: ProswingCanonicalShot['total'];
-  if (s.total_yd != null) total = { value: s.total_yd, unit: 'yd' };
-  else if (s.total_m != null) total = { value: s.total_m, unit: 'm' };
+  let total: ProswingCanonicalShot["total"];
+  if (s.total_yd != null) total = { value: s.total_yd, unit: "yd" };
+  else if (s.total_m != null) total = { value: s.total_m, unit: "m" };
 
   // Resolve deviation — yd > m > ft
-  let deviation: ProswingCanonicalShot['deviation'];
-  if (s.deviation_yd != null) deviation = { value: s.deviation_yd, unit: 'yd' };
-  else if (s.deviation_m != null) deviation = { value: s.deviation_m, unit: 'm' };
-  else deviation = { value: s.deviation_ft!, unit: 'ft' };
+  let deviation: ProswingCanonicalShot["deviation"];
+  if (s.deviation_yd != null) deviation = { value: s.deviation_yd, unit: "yd" };
+  else if (s.deviation_m != null)
+    deviation = { value: s.deviation_m, unit: "m" };
+  else deviation = { value: s.deviation_ft!, unit: "ft" };
 
   return {
-    type: 'shot.recorded',
+    type: "shot.recorded",
     data: {
       user_token: p.data.user_token,
       shot: {
@@ -298,10 +318,10 @@ function fromV2(p: PayloadV2): ProswingCanonicalPayload {
         occurred_at: s.occurred_at,
         club_code: s.club_code,
         ball_speed: ballSpeed,
-        ...ifDefined('club_speed', clubSpeed),
-        launch: { value: s.launch_deg, unit: 'deg' },
+        ...ifDefined("club_speed", clubSpeed),
+        launch: { value: s.launch_deg, unit: "deg" },
         carry,
-        ...ifDefined('total', total),
+        ...ifDefined("total", total),
         deviation,
       },
     },
@@ -311,7 +331,7 @@ function fromV2(p: PayloadV2): ProswingCanonicalPayload {
 function fromV3(p: PayloadV3): ProswingCanonicalPayload {
   const s = p.data.shot;
   return {
-    type: 'shot.recorded',
+    type: "shot.recorded",
     data: {
       user_token: p.data.player.id,
       shot: {
@@ -319,11 +339,11 @@ function fromV3(p: PayloadV3): ProswingCanonicalPayload {
         occurred_at: s.occurred_at,
         club_code: s.club_code,
         ball_speed: s.ball_speed,
-        ...ifDefined('club_speed', s.club_speed),
-        launch: { value: s.launch_angle, unit: 'deg' },
-        ...ifDefined('spin_rpm', s.spin_rpm),
+        ...ifDefined("club_speed", s.club_speed),
+        launch: { value: s.launch_angle, unit: "deg" },
+        ...ifDefined("spin_rpm", s.spin_rpm),
         carry: s.carry,
-        ...ifDefined('total', s.total),
+        ...ifDefined("total", s.total),
         deviation: s.deviation,
       },
     },
@@ -342,11 +362,11 @@ function fromV3(p: PayloadV3): ProswingCanonicalPayload {
 export function parseProswingRaw(raw: unknown): ProswingCanonicalPayload {
   const version = detectVersion(raw);
 
-  if (version === 'v3') {
+  if (version === "v3") {
     const parsed = ProswingPayloadV3Schema.parse(raw); // throws ZodError on failure
     return fromV3(parsed);
   }
-  if (version === 'v2') {
+  if (version === "v2") {
     const parsed = ProswingPayloadV2Schema.parse(raw); // throws ZodError
     return fromV2(parsed);
   }
@@ -367,17 +387,19 @@ export function parseProswingRaw(raw: unknown): ProswingCanonicalPayload {
  *   @Body(new ProswingValidationPipe()) payload: ProswingCanonicalPayload
  */
 export class ProswingValidationPipe implements PipeTransform {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  transform(value: unknown, _metadata: ArgumentMetadata): ProswingCanonicalPayload {
+  transform(
+    value: unknown,
+    _metadata: ArgumentMetadata,
+  ): ProswingCanonicalPayload {
     try {
       return parseProswingRaw(value);
     } catch (err) {
       if (err instanceof ZodError) {
         throw new BadRequestException({
-          error_code: 'PAYLOAD_VALIDATION_FAILED',
-          message: 'Request payload validation failed.',
+          error_code: "PAYLOAD_VALIDATION_FAILED",
+          message: "Request payload validation failed.",
           issues: err.issues.map((e) => ({
-            path: e.path.join('.'),
+            path: e.path.join("."),
             code: e.code,
             message: e.message,
           })),

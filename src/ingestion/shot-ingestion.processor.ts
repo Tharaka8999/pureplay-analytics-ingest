@@ -1,12 +1,17 @@
-import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import type { Job } from 'bullmq';
-import { ShotRepository, hasExcessiveClockSkew } from './shot-repository';
-import { getShotsTotal, getE2eLag, getNearDuplicates, getJobsFailed } from '../shared/metrics/ingest-metrics';
-import { redactPii } from '../shared/pii-redact';
-import type { ShotJob } from './shot-ingestion.queue';
-import { SHOT_INGESTION_QUEUE } from './shot-ingestion.queue';
-import { IdentityService } from '../identity/identity.service';
+import { Processor, WorkerHost, OnWorkerEvent } from "@nestjs/bullmq";
+import { Injectable, Logger } from "@nestjs/common";
+import type { Job } from "bullmq";
+import { ShotRepository, hasExcessiveClockSkew } from "./shot-repository";
+import {
+  getShotsTotal,
+  getE2eLag,
+  getNearDuplicates,
+  getJobsFailed,
+} from "../shared/metrics/ingest-metrics";
+import { redactPii } from "../shared/pii-redact";
+import type { ShotJob } from "./shot-ingestion.queue";
+import { SHOT_INGESTION_QUEUE } from "./shot-ingestion.queue";
+import { IdentityService } from "../identity/identity.service";
 
 @Injectable()
 @Processor(SHOT_INGESTION_QUEUE, { concurrency: 16 })
@@ -39,8 +44,11 @@ export class ShotIngestionProcessor extends WorkerHost {
       try {
         redactedBody = redactPii(shot.raw_payload);
       } catch (redactErr) {
-        this.logger.error({ err: redactErr }, 'PII redaction failed — storing redaction error marker');
-        redactedBody = '[PII_REDACTION_ERROR]';
+        this.logger.error(
+          { err: redactErr },
+          "PII redaction failed — storing redaction error marker",
+        );
+        redactedBody = "[PII_REDACTION_ERROR]";
       }
 
       await this.shotRepository.recordIngestionFailure({
@@ -48,12 +56,16 @@ export class ShotIngestionProcessor extends WorkerHost {
         received_at_utc: receivedAtUtc,
         raw_body: redactedBody,
         http_status: 0,
-        error_code: 'CLOCK_SKEW_EXCESSIVE',
+        error_code: "CLOCK_SKEW_EXCESSIVE",
         error_detail: { captured_at_utc: shot.captured_at_utc },
         correlation_id: correlationId,
       });
 
-      getShotsTotal().inc({ vendor, outcome: 'rejected_clock', parser_version: parserVersion });
+      getShotsTotal().inc({
+        vendor,
+        outcome: "rejected_clock",
+        parser_version: parserVersion,
+      });
       return;
     }
 
@@ -64,23 +76,53 @@ export class ShotIngestionProcessor extends WorkerHost {
       shot.vendor,
       shot.vendor_user_id,
     );
-    const resolvedShot = canonicalUserId ? { ...shot, canonical_user_id: canonicalUserId } : shot;
+    const resolvedShot = canonicalUserId
+      ? { ...shot, canonical_user_id: canonicalUserId }
+      : shot;
 
-    const { inserted, canonical_shot_id } = await this.shotRepository.upsertIfNew(resolvedShot);
+    const { inserted, canonical_shot_id } =
+      await this.shotRepository.upsertIfNew(resolvedShot);
 
     if (!inserted) {
-      getShotsTotal().inc({ vendor, outcome: 'deduplicated', parser_version: parserVersion });
-      this.logger.debug(`Shot deduplicated | ${JSON.stringify({ correlation_id: correlationId, vendor, canonical_shot_id })}`);
+      getShotsTotal().inc({
+        vendor,
+        outcome: "duplicate_exact",
+        parser_version: parserVersion,
+      });
+      this.logger.debug(
+        `Shot deduplicated (exact) | ${JSON.stringify({ correlation_id: correlationId, vendor, canonical_shot_id })}`,
+      );
       return;
     }
 
-    // Near-dedupe check runs only on newly inserted shots
-    const wasNearDuplicate = await this.shotRepository.checkAndFlagNearDuplicates(resolvedShot);
-    if (wasNearDuplicate) {
+    // Near-dedupe check runs only on newly inserted shots.
+    // Returns the origin canonical_shot_id when a near-dup is found so we can
+    // update the outbox event payload before the publisher reads it.
+    const nearDupOriginId =
+      await this.shotRepository.checkAndFlagNearDuplicates(resolvedShot);
+    if (nearDupOriginId !== null) {
       getNearDuplicates().inc({ vendor });
+      getShotsTotal().inc({
+        vendor,
+        outcome: "duplicate_near",
+        parser_version: parserVersion,
+      });
+      // Propagate duplicate_of into the outbox payload so downstream consumers
+      // see the correct relationship even before the row is polled.
+      await this.shotRepository.updateOutboxEventDuplicateOf(
+        canonical_shot_id,
+        nearDupOriginId,
+      );
+      this.logger.debug(
+        `Shot flagged near-duplicate | ${JSON.stringify({ correlation_id: correlationId, vendor, canonical_shot_id, duplicate_of: nearDupOriginId })}`,
+      );
+    } else {
+      getShotsTotal().inc({
+        vendor,
+        outcome: "accepted",
+        parser_version: parserVersion,
+      });
     }
-
-    getShotsTotal().inc({ vendor, outcome: 'accepted', parser_version: parserVersion });
 
     // shot.persisted event is published by OutboxPublisherService (transactional outbox).
     // The outbox row was written atomically with the shot INSERT in upsertIfNew().
@@ -88,14 +130,18 @@ export class ShotIngestionProcessor extends WorkerHost {
     const lagMs = Date.now() - new Date(receivedAtUtc).getTime();
     getE2eLag().observe({ vendor }, lagMs);
 
-    this.logger.log(`Shot persisted | ${JSON.stringify({ correlation_id: correlationId, vendor, canonical_shot_id, outcome: 'accepted' })}`);
+    this.logger.log(
+      `Shot persisted | ${JSON.stringify({ correlation_id: correlationId, vendor, canonical_shot_id, outcome: "accepted" })}`,
+    );
   }
 
-  @OnWorkerEvent('failed')
+  @OnWorkerEvent("failed")
   onFailed(job: Job<ShotJob> | undefined, error: Error): void {
-    const vendor = job?.data?.normalisedShot?.vendor ?? 'unknown';
-    const correlationId = job?.data?.correlationId ?? 'unknown';
-    const jobId = job?.id ?? 'unknown';
+    const vendor = job?.data?.normalisedShot?.vendor ?? "unknown";
+    const parserVersion =
+      job?.data?.normalisedShot?.parser_version ?? "unknown";
+    const correlationId = job?.data?.correlationId ?? "unknown";
+    const jobId = job?.id ?? "unknown";
 
     // Use warn, not error — permanent job failures are expected under transient vendor
     // issues (network timeouts, DB restarts) and should not trigger error-level alerts.
@@ -111,5 +157,10 @@ export class ShotIngestionProcessor extends WorkerHost {
     );
 
     getJobsFailed().inc({ vendor });
+    getShotsTotal().inc({
+      vendor,
+      outcome: "failed",
+      parser_version: parserVersion,
+    });
   }
 }

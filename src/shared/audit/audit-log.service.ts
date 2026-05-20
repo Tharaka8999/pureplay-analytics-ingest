@@ -1,9 +1,9 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { type Kysely, type Transaction } from 'kysely';
-import type { Database } from '../kysely/types';
-import { KYSELY } from '../kysely/kysely.module';
+import { Injectable, Inject } from "@nestjs/common";
+import { type Kysely, type Transaction } from "kysely";
+import type { Database } from "../kysely/types";
+import { KYSELY } from "../kysely/kysely.module";
 
-export type AuditAction = 'IDENTITY_LINK' | 'IDENTITY_UNLINK' | 'IDENTITY_LIST';
+export type AuditAction = "IDENTITY_LINK" | "IDENTITY_UNLINK" | "IDENTITY_LIST";
 
 export interface AuditEntry {
   action: AuditAction;
@@ -23,13 +23,10 @@ export class AuditLogService {
    * If a Kysely transaction is provided, the write participates in that transaction
    * (used for atomic link/unlink + audit in a single DB round-trip).
    */
-  async record(
-    entry: AuditEntry,
-    trx?: Transaction<Database>,
-  ): Promise<void> {
+  async record(entry: AuditEntry, trx?: Transaction<Database>): Promise<void> {
     const db = (trx ?? this.db) as Kysely<Database>;
     await db
-      .insertInto('audit_log')
+      .insertInto("audit_log")
       .values({
         action: entry.action,
         actor: entry.actor,

@@ -1,10 +1,10 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const TrackproPayloadSchema = z
   .object({
     shot_uid: z
       .string()
-      .regex(/^tp-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}$/, 'Invalid shot_uid format'),
+      .regex(/^tp-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}$/, "Invalid shot_uid format"),
     user_external_id: z.string().min(1).max(255),
     session_id: z.string().min(1).max(255).optional(),
     device_id: z.string().min(1).max(255).optional(),

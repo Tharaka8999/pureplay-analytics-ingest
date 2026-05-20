@@ -275,9 +275,15 @@ Append-only audit trail for identity operations.
 
 ```sql
 CREATE TYPE vendor_enum AS ENUM ('trackpro', 'swingmetric', 'proswing');
-CREATE TYPE club_code_enum AS ENUM ('DR', '3W', '5W', '7W', '2H', '3H', '4H', '5H',
-  '2I', '3I', '4I', '5I', '6I', '7I', '8I', '9I',
-  'PW', 'GW', 'SW', 'LW', 'PT', 'UK');
+CREATE TYPE club_code_enum AS ENUM (
+  'DR',
+  '3W', '4W', '5W', '7W',
+  '2H', '3H', '4H', '5H',
+  '1I', '2I', '3I', '4I', '5I', '6I', '7I', '8I', '9I',
+  'PW', 'GW', 'AW', 'SW', 'LW',
+  'PT',
+  'UNKNOWN'
+);
 ```
 
 TypeScript union types mirror these ENUMs. Never pass a plain string where `Vendor` or `ClubCode` is expected.

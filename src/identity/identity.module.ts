@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { IdentityService } from './identity.service';
-import { IdentityController } from './identity.controller';
-import { AuditLogService } from '../shared/audit/audit-log.service';
+import { Module } from "@nestjs/common";
+import { IdentityService } from "./identity.service";
+import { IdentityController } from "./identity.controller";
+import { AuditLogService } from "../shared/audit/audit-log.service";
 
 @Module({
   controllers: [IdentityController],

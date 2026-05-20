@@ -1,12 +1,12 @@
-import { type INestApplication } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { type INestApplication } from "@nestjs/common";
+import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 
 // [SEC] OpenAPI is only mounted in development (gated in main.api.ts).
 // Never expose Swagger in production — it leaks the full API surface and
 // the "Try it out" feature can be used to drive real traffic against the service.
 export function setupOpenApi(app: INestApplication): void {
   const config = new DocumentBuilder()
-    .setTitle('Pureplay Analytics Ingest')
+    .setTitle("Pureplay Analytics Ingest")
     .setDescription(
       `Multi-vendor golf shot ingestion and query service.
 
@@ -26,27 +26,37 @@ require \`Authorization: Bearer <INTERNAL_API_KEY>\` in production.
 user_id. The Portal BFF is responsible for access control; this service must never be
 exposed directly to the public internet.`,
     )
-    .setVersion('1.0.0')
+    .setVersion("1.0.0")
     .addApiKey(
-      { type: 'apiKey', in: 'header', name: 'X-Webhook-Auth', description: 'Per-vendor webhook API key (WEBHOOK_AUTH_MODE=api_key)' },
-      'webhook_api_key',
+      {
+        type: "apiKey",
+        in: "header",
+        name: "X-Webhook-Auth",
+        description: "Per-vendor webhook API key (WEBHOOK_AUTH_MODE=api_key)",
+      },
+      "webhook_api_key",
     )
     .addBearerAuth(
-      { type: 'http', scheme: 'bearer', description: 'Internal API key for query/stats/identity/metrics (INTERNAL_API_KEY)' },
-      'internal_api_key',
+      {
+        type: "http",
+        scheme: "bearer",
+        description:
+          "Internal API key for query/stats/identity/metrics (INTERNAL_API_KEY)",
+      },
+      "internal_api_key",
     )
-    .addTag('webhooks', 'Ingest endpoints for launch monitor vendors')
-    .addTag('shots', 'Query normalised shot records')
-    .addTag('stats', 'Per-club aggregate statistics')
-    .addTag('identity', 'Manage vendor → canonical user identity mappings')
-    .addTag('health', 'Liveness and readiness probes')
-    .addTag('metrics', 'Prometheus metrics')
+    .addTag("webhooks", "Ingest endpoints for launch monitor vendors")
+    .addTag("shots", "Query normalised shot records")
+    .addTag("stats", "Per-club aggregate statistics")
+    .addTag("identity", "Manage vendor → canonical user identity mappings")
+    .addTag("health", "Liveness and readiness probes")
+    .addTag("metrics", "Prometheus metrics")
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    jsonDocumentUrl: 'api/docs-json',
-    yamlDocumentUrl: 'api/docs-yaml',
+  SwaggerModule.setup("api/docs", app, document, {
+    jsonDocumentUrl: "api/docs-json",
+    yamlDocumentUrl: "api/docs-yaml",
     swaggerOptions: {
       // [SEC] persistAuthorization: false — prevents credentials being stored
       // in localStorage where they could be exfiltrated by XSS or extensions.

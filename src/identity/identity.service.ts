@@ -1,12 +1,12 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { type Kysely } from 'kysely';
-import type { Database } from '../shared/kysely/types';
-import { KYSELY } from '../shared/kysely/kysely.module';
-import { VALID_VENDORS, type Vendor } from '../shared/domain/shot';
-import { IdentityNotFoundError } from '../shared/errors/domain-errors';
-import { AuditLogService } from '../shared/audit/audit-log.service';
-import Redis from 'ioredis';
-import { REDIS } from '../shared/redis/redis.module';
+import { Injectable, Inject, Logger } from "@nestjs/common";
+import { type Kysely } from "kysely";
+import type { Database } from "../shared/kysely/types";
+import { KYSELY } from "../shared/kysely/kysely.module";
+import { VALID_VENDORS, type Vendor } from "../shared/domain/shot";
+import { IdentityNotFoundError } from "../shared/errors/domain-errors";
+import { AuditLogService } from "../shared/audit/audit-log.service";
+import Redis from "ioredis";
+import { REDIS } from "../shared/redis/redis.module";
 
 export interface VendorIdentity {
   id: number;
@@ -48,7 +48,10 @@ export class IdentityService {
    * Result is cached in Redis for IDENTITY_CACHE_TTL_S seconds to reduce DB load.
    * Returns null if no mapping exists — callers store the shot with null canonical_user_id.
    */
-  async resolveCanonicalUserId(vendor: string, vendorUserId: string): Promise<string | null> {
+  async resolveCanonicalUserId(
+    vendor: string,
+    vendorUserId: string,
+  ): Promise<string | null> {
     if (!VALID_VENDORS.includes(vendor as Vendor)) return null;
 
     const cacheKey = identityCacheKey(vendor, vendorUserId);
@@ -56,21 +59,21 @@ export class IdentityService {
     // Cache hit
     const cached = await this.redis.get(cacheKey);
     if (cached !== null) {
-      return cached === '' ? null : cached;
+      return cached === "" ? null : cached;
     }
 
     // Cache miss — query DB
     const row = await this.db
-      .selectFrom('user_identities')
-      .select('canonical_user_id')
-      .where('vendor', '=', vendor as Vendor)
-      .where('vendor_user_id', '=', vendorUserId)
+      .selectFrom("user_identities")
+      .select("canonical_user_id")
+      .where("vendor", "=", vendor as Vendor)
+      .where("vendor_user_id", "=", vendorUserId)
       .executeTakeFirst();
 
     const result = row?.canonical_user_id ?? null;
 
     // Cache: store '' for null so we distinguish "cached null" from "not cached"
-    await this.redis.set(cacheKey, result ?? '', 'EX', IDENTITY_CACHE_TTL_S);
+    await this.redis.set(cacheKey, result ?? "", "EX", IDENTITY_CACHE_TTL_S);
 
     return result;
   }
@@ -92,16 +95,20 @@ export class IdentityService {
     vendor: Vendor,
     vendorUserId: string,
     canonicalUserId: string,
-    actor = 'internal-api',
+    actor = "internal-api",
   ): Promise<VendorIdentity> {
     // ── Short transaction: upsert (with RETURNING) + audit ──────────────────
     const result = await this.db.transaction().execute(async (trx) => {
       // 1. Upsert + return in one statement — RETURNING * eliminates step 3 SELECT
       const row = await trx
-        .insertInto('user_identities')
-        .values({ vendor, vendor_user_id: vendorUserId, canonical_user_id: canonicalUserId })
+        .insertInto("user_identities")
+        .values({
+          vendor,
+          vendor_user_id: vendorUserId,
+          canonical_user_id: canonicalUserId,
+        })
         .onConflict((oc) =>
-          oc.columns(['vendor', 'vendor_user_id']).doUpdateSet({
+          oc.columns(["vendor", "vendor_user_id"]).doUpdateSet({
             canonical_user_id: canonicalUserId,
             updated_at: new Date().toISOString(),
           }),
@@ -112,7 +119,7 @@ export class IdentityService {
       // 2. Audit log — inside TX for atomicity with the mapping upsert
       await this.auditLog.record(
         {
-          action: 'IDENTITY_LINK',
+          action: "IDENTITY_LINK",
           actor,
           canonical_user_id: canonicalUserId,
           vendor,
@@ -136,22 +143,28 @@ export class IdentityService {
     // slow under contention.  Running it after the transaction commits prevents
     // it from blocking other identity-link or identity-list operations.
     void this.db
-      .updateTable('shots')
+      .updateTable("shots")
       .set({ canonical_user_id: canonicalUserId })
-      .where('vendor', '=', vendor)
-      .where('vendor_user_id', '=', vendorUserId)
-      .where('canonical_user_id', 'is', null)
+      .where("vendor", "=", vendor)
+      .where("vendor_user_id", "=", vendorUserId)
+      .where("canonical_user_id", "is", null)
       .execute()
       .catch((err: unknown) => {
         // Log but do not surface — the identity link itself succeeded.
         // A subsequent linkIdentity call will re-attempt the backfill.
-        this.logger.error({ err, vendor, vendorUserId, canonicalUserId }, 'identity backfill failed');
+        this.logger.error(
+          { err, vendor, vendorUserId, canonicalUserId },
+          "identity backfill failed",
+        );
       });
 
     return result as VendorIdentity;
   }
 
-  async listByCanonicalUser(canonicalUserId: string, actor = 'internal-api'): Promise<VendorIdentity[]> {
+  async listByCanonicalUser(
+    canonicalUserId: string,
+    actor = "internal-api",
+  ): Promise<VendorIdentity[]> {
     const listKey = identityListCacheKey(canonicalUserId);
 
     // Cache hit — skip DB round-trip entirely
@@ -159,7 +172,7 @@ export class IdentityService {
     if (cached !== null) {
       const rows = JSON.parse(cached) as VendorIdentity[];
       void this.auditLog.record({
-        action: 'IDENTITY_LIST',
+        action: "IDENTITY_LIST",
         actor,
         canonical_user_id: canonicalUserId,
         metadata: { result_count: rows.length },
@@ -168,25 +181,28 @@ export class IdentityService {
     }
 
     const rows = await this.db
-      .selectFrom('user_identities')
+      .selectFrom("user_identities")
       .selectAll()
-      .where('canonical_user_id', '=', canonicalUserId)
-      .orderBy('created_at', 'asc')
+      .where("canonical_user_id", "=", canonicalUserId)
+      .orderBy("created_at", "asc")
       .execute();
 
     // Cache the list; invalidated immediately on link/unlink so stale reads are bounded
     // to IDENTITY_LIST_CACHE_TTL_S seconds only if a DEL races with this write.
     void this.redis
-      .set(listKey, JSON.stringify(rows), 'EX', IDENTITY_LIST_CACHE_TTL_S)
+      .set(listKey, JSON.stringify(rows), "EX", IDENTITY_LIST_CACHE_TTL_S)
       .catch((err: unknown) => {
-        this.logger.warn({ err, canonicalUserId }, 'identity list cache write failed');
+        this.logger.warn(
+          { err, canonicalUserId },
+          "identity list cache write failed",
+        );
       });
 
     // Fire-and-forget audit write — a read does not need to block on its own audit entry.
     // SOC2 CC6 / ISO A.8.15 requires capturing the access; timing within a few seconds
     // is acceptable and prevents a slow INSERT from adding latency to every GET response.
     void this.auditLog.record({
-      action: 'IDENTITY_LIST',
+      action: "IDENTITY_LIST",
       actor,
       canonical_user_id: canonicalUserId,
       metadata: { result_count: rows.length },
@@ -204,14 +220,14 @@ export class IdentityService {
     vendor: Vendor,
     vendorUserId: string,
     canonicalUserId: string,
-    actor = 'internal-api',
+    actor = "internal-api",
   ): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       const deleteResult = await trx
-        .deleteFrom('user_identities')
-        .where('vendor', '=', vendor)
-        .where('vendor_user_id', '=', vendorUserId)
-        .where('canonical_user_id', '=', canonicalUserId)
+        .deleteFrom("user_identities")
+        .where("vendor", "=", vendor)
+        .where("vendor_user_id", "=", vendorUserId)
+        .where("canonical_user_id", "=", canonicalUserId)
         .executeTakeFirst();
 
       if (!deleteResult || deleteResult.numDeletedRows === BigInt(0)) {
@@ -220,7 +236,7 @@ export class IdentityService {
 
       await this.auditLog.record(
         {
-          action: 'IDENTITY_UNLINK',
+          action: "IDENTITY_UNLINK",
           actor,
           canonical_user_id: canonicalUserId,
           vendor,
